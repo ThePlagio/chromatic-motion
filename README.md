@@ -1,62 +1,59 @@
 # Chromatic Motion
 
-Prototipo web mobile per iPhone: mostra l'anteprima della fotocamera, consente di disegnare manualmente la sagoma di un oggetto e applica al suo interno un riempimento opaco animato.
+Prototipo web mobile per iPhone: osserva la fotocamera, cerca **una sola regione grande** non di sfondo e fa muovere linee libere o forme geometriche soltanto al suo interno.
 
-Il progetto è statico, senza dipendenze, backend, upload o raccolta dati. È composto da HTML, CSS e JavaScript ed è pronto per GitHub Pages.
+È un sito statico pronto per GitHub Pages. La fotocamera e l'elaborazione dei suoi fotogrammi rimangono nel browser; l'app non salva, carica o trasmette fotografie e video.
 
-## Funzioni incluse
+## Cosa fa questa versione
 
-- Richiesta della fotocamera posteriore con `facingMode: "environment"` come preferenza.
-- Fotogramma fissato, così il contorno manuale non si sposta mentre viene disegnato.
-- Sagoma freehand: un solo gesto lungo il bordo, chiusura automatica al rilascio del dito.
-- Riempimento completamente opaco all'interno della sagoma.
-- Due effetti: **strisce** diagonali in movimento e **cerchi** animati.
-- Palette **colori random** rigenerabile oppure **bianco e nero**.
-- Controlli per densità e velocità.
-- Gestione essenziale degli errori di permesso, assenza della camera, pagina non HTTPS e camera occupata.
+- Chiede la fotocamera posteriore come preferenza (`facingMode: environment`).
+- Carica nel browser un modello generico di segmentazione visiva (MediaPipe Image Segmenter con modello DeepLab) e analizza il live a intervalli controllati.
+- Tiene soltanto la regione connessa non di sfondo più grande, pari almeno al **18% dell'inquadratura**: gli elementi piccoli vengono ignorati.
+- Applica effetti **parziali**, non un riempimento totale: linee morbide animate oppure cerchi, rettangoli e triangoli in movimento. Il ritaglio della maschera impedisce loro di uscire dalla sagoma trovata.
+- Offre colori casuali o bianco e nero, con densità e velocità regolabili.
+- Mantiene l'alternativa affidabile: fissa un fotogramma e disegna manualmente il contorno quando il riconoscimento automatico sbaglia.
+
+## Cosa non promette
+
+La parola “vicino” è qui una scorciatoia visiva: il sito **non misura la distanza** e non usa dati di profondità. Il modello cerca una zona grande e segmentabile, non riconosce qualunque oggetto per nome.
+
+I bordi possono essere instabili con capelli, vetro, trasparenze, ombre, superfici lucide, elementi sottili, soggetti sovrapposti o sfondi simili. Una persona o un oggetto grande ben separato dallo sfondo è il punto di partenza consigliato. Safari può rallentare o consumare più batteria durante l'analisi; per questo il prototipo aggiorna la maschera a circa 4-5 volte al secondo, non a ogni fotogramma.
+
+## Connessione e privacy
+
+Al primo avvio del rilevamento automatico il browser scarica il runtime MediaPipe da jsDelivr e il modello pubblico DeepLab dall'hosting Google. Serve quindi una connessione Internet per quel caricamento. Dopo il caricamento, l'inferenza avviene nel browser sul dispositivo: Chromatic Motion non invia fotogrammi, maschere o coordinate a un proprio server.
+
+Il riferimento tecnico del modello e dell'API è la [documentazione ufficiale MediaPipe Image Segmenter](https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter/web_js).
 
 ## Pubblicazione su GitHub Pages
 
-1. Crea un nuovo repository GitHub, ad esempio `chromatic-motion`.
-2. Carica il **contenuto** di questa cartella nel repository: `index.html`, `styles.css`, `app.js`, `manifest.webmanifest` e `.nojekyll` devono essere nella radice del repository.
-3. In GitHub apri **Settings → Pages**.
-4. In **Build and deployment**, scegli **Deploy from a branch**, la branch `main` e la cartella `/(root)`, quindi salva.
-5. Attendi la pubblicazione e apri l'URL `https://<utente>.github.io/chromatic-motion/` con Safari su iPhone.
+Il repository pubblicato è: [ThePlagio/chromatic-motion](https://github.com/ThePlagio/chromatic-motion).
 
-GitHub Pages usa HTTPS: questo è indispensabile per la fotocamera. Un file aperto direttamente dal telefono o un server HTTP sulla rete locale non è una condizione affidabile per l'accesso alla fotocamera su Safari.
+1. Mantieni `index.html`, `styles.css`, `app.js`, `manifest.webmanifest` e `.nojekyll` nella radice del repository.
+2. In GitHub apri **Settings → Pages**.
+3. In **Build and deployment**, scegli **Deploy from a branch**, branch `main` e cartella `/(root)`.
+4. Apri il sito in Safari su iPhone: [theplagio.github.io/chromatic-motion](https://theplagio.github.io/chromatic-motion/).
 
-## Avvio locale per il layout
-
-Non c'è una fase di build. Per vedere l'interfaccia su computer basta servire questi file come sito statico. La fotocamera potrà però essere concessa soltanto in un contesto sicuro: HTTPS oppure `localhost` sullo stesso dispositivo. Per il test su iPhone conviene usare direttamente GitHub Pages.
+GitHub Pages usa HTTPS, necessario per la fotocamera. Aprire il file direttamente dal telefono o da HTTP in rete locale non è una condizione affidabile per Safari.
 
 ## Piano di test — Safari su iPhone 16
 
-Questa è la procedura da eseguire sul dispositivo reale. Il prototipo non dichiara un test fisico della fotocamera finché questi passaggi non vengono svolti.
+Questo piano deve essere eseguito sul dispositivo reale. Nessun test fisico della fotocamera o della segmentazione viene dichiarato completato finché non viene fatto qui.
 
 | Caso | Azione | Risultato atteso | Esito iniziale |
 | --- | --- | --- | --- |
-| HTTPS | Apri l'URL GitHub Pages in Safari | Nessun avviso di contesto non sicuro | Da eseguire su iPhone |
-| Permesso | Tocca “Apri fotocamera posteriore” e consenti l'accesso | Anteprima attiva; viene preferita la camera posteriore | Da eseguire su iPhone |
-| Negazione | Ricarica dopo aver negato il permesso | Messaggio chiaro con indicazione delle impostazioni Safari | Da eseguire su iPhone |
-| Sagoma | Fissa il fotogramma, traccia un oggetto con un gesto continuo | Contorno chiuso e riempimento confinato alla sagoma | Da eseguire su iPhone |
-| Strisce | Seleziona “Strisce”, varia densità e velocità | Bande opache animate cambiano spaziatura e ritmo | Da eseguire su iPhone |
-| Cerchi | Seleziona “Cerchi”, varia densità e velocità | Cerchi opachi animati restano nella sagoma | Da eseguire su iPhone |
-| Palette | Alterna colori random / bianco e nero, poi “Genera nuovi colori” | Cambia la palette colorata; B/N resta monocromatico | Da eseguire su iPhone |
-| Rotazione | Ruota l'iPhone con una sagoma attiva | La sagoma viene rimossa con un messaggio che richiede di ridisegnarla | Da eseguire su iPhone |
-| Uscita | Tocca “Chiudi” oppure lascia la pagina | La camera viene fermata quando si usa “Chiudi”; il browser interrompe le tracce in uscita dalla pagina | Da eseguire su iPhone |
+| HTTPS | Apri il sito pubblicato in Safari | Nessun avviso di pagina non sicura | Da eseguire su iPhone |
+| Permesso | Tocca “Apri fotocamera posteriore” e consenti | Anteprima attiva; viene preferita la camera posteriore | Da eseguire su iPhone |
+| Primo caricamento | Con rete attiva, attendi il messaggio “Cerco un oggetto grande” | Runtime e modello diventano pronti senza bloccare la pagina | Da eseguire su iPhone |
+| Oggetto grande | Inquadra una persona o un oggetto che occupi almeno circa un quinto dello schermo e sia staccato dallo sfondo | Compare “Oggetto grande agganciato”; le forme restano nella sua maschera | Da eseguire su iPhone |
+| Oggetto piccolo | Tieni nell'inquadratura un elemento piccolo | Nessun aggancio stabile e nessun effetto applicato a quell'elemento | Da eseguire su iPhone |
+| Effetti | Alterna “Linee libere” e “Forme”; varia densità e velocità | Le figure sono animate, parziali e non oltrepassano il bordo stimato | Da eseguire su iPhone |
+| Palette | Alterna colori random / bianco e nero e usa “Genera nuovi colori” | La palette cambia; B/N resta monocromatico | Da eseguire su iPhone |
+| Caso difficile | Prova vetro, capelli, riflessi, poca luce o due soggetti sovrapposti | Possibili errori di bordo: passa alla sagoma manuale | Da eseguire su iPhone |
+| Fallback | Tocca “Fissa fotogramma”, poi “Disegna a mano” | Il contorno manuale sostituisce l'automatico e confina l'effetto | Da eseguire su iPhone |
+| Uscita | Tocca “Chiudi” | Le tracce della camera vengono fermate | Da eseguire su iPhone |
 
-Durante il test, prova soggetti ben separati dallo sfondo, bordi sottili, superfici lucide e luce bassa. Verifica anche il comportamento dopo una chiamata o dopo che un'altra app ha usato la camera: Safari può richiedere di ricaricare la pagina o di rilasciare la camera dall'altra app.
+## Compatibilità
 
-## Limiti della selezione e segmentazione automatica
+Richiede Safari moderno, HTTPS, `getUserMedia`, Canvas 2D, Pointer Events e supporto ai moduli JavaScript. L'app preferisce la camera posteriore, ma la lente effettiva dipende da Safari, dai permessi e dalle camere disponibili sul dispositivo.
 
-La prima versione usa intenzionalmente una selezione manuale su fotogramma fissato: è prevedibile, controllabile dall'utente e non richiede di caricare un modello di intelligenza artificiale. Non è un ritaglio professionale al pixel; la precisione dipende dalla mano e dal contrasto del soggetto.
-
-La segmentazione automatica non è inclusa in questo prototipo. In un browser mobile può avere contorni instabili su capelli, vetro, ombre, elementi molto sottili, soggetti parzialmente coperti e sfondi con colori simili. Può inoltre ridurre fluidità e autonomia della batteria, specialmente se il modello lavora a ogni fotogramma. Un'evoluzione possibile è aggiungere una segmentazione locale assistita (per esempio con un modello eseguito nel browser) mantenendo sempre “Fissa fotogramma + correzione manuale” come percorso affidabile.
-
-## Privacy
-
-Il video e il fotogramma fissato restano nel browser. L'app non invia immagini o coordinate di disegno a server e non registra automaticamente video o foto. Chiudere la camera interrompe le tracce attive.
-
-## Compatibilità prevista
-
-Richiede un browser moderno con `getUserMedia`, Canvas 2D e Pointer Events. Il bersaglio di test è Safari aggiornato su iPhone 16 via HTTPS. I dettagli esatti della scelta della lente posteriore dipendono da Safari, dalle autorizzazioni e dalle camere disponibili sul dispositivo.
