@@ -9,8 +9,8 @@ Prototipo web mobile per iPhone: osserva la fotocamera, cerca **una sola regione
 - Chiede la fotocamera posteriore come preferenza (`facingMode: environment`).
 - Carica nel browser un modello generico di segmentazione visiva (MediaPipe Image Segmenter con modello DeepLab) e analizza il live a intervalli controllati.
 - Tiene soltanto la regione connessa non di sfondo più grande, pari almeno al **18% dell'inquadratura**: gli elementi piccoli vengono ignorati.
-- Applica effetti **parziali**, non un riempimento totale: linee lunghe, irregolari e gestuali in movimento continuo — oppure forme geometriche. Il ritaglio della maschera impedisce loro di uscire dalla sagoma trovata.
-- Offre colori casuali o bianco e nero (predefinito, per richiamare il disegno a tratto), con densità e velocità regolabili.
+- Applica effetti **parziali**, non un riempimento totale. Tre stili di tratto: **Precisa** (quasi retta), **Deformata** (lunga, irregolare e gestuale) e **Spirale** animata. Il ritaglio della maschera impedisce loro di uscire dalla sagoma trovata.
+- Offre colori casuali o bianco e nero (predefinito, per richiamare il disegno a tratto), con numero di linee (da 2 a 30), lunghezza e velocità regolabili.
 - Consente di scegliere **Camera + linee** oppure **Solo linee**: nella seconda modalità il video viene nascosto, ma la fotocamera continua a fornire la maschera automatica.
 - Mantiene l'alternativa affidabile: fissa un fotogramma e disegna manualmente il contorno quando il riconoscimento automatico sbaglia.
 
@@ -48,7 +48,8 @@ Questo piano deve essere eseguito sul dispositivo reale. Nessun test fisico dell
 | Primo caricamento | Con rete attiva, attendi il messaggio “Cerco un oggetto grande” | Runtime e modello diventano pronti senza bloccare la pagina | Da eseguire su iPhone |
 | Oggetto grande | Inquadra una persona o un oggetto che occupi almeno circa un quinto dello schermo e sia staccato dallo sfondo | Compare “Oggetto grande agganciato”; le forme restano nella sua maschera | Da eseguire su iPhone |
 | Oggetto piccolo | Tieni nell'inquadratura un elemento piccolo | Nessun aggancio stabile e nessun effetto applicato a quell'elemento | Da eseguire su iPhone |
-| Effetti | Seleziona “Linee libere”; varia densità e velocità | Segni lunghi, irregolari e in movimento continuo restano nel bordo stimato | Da eseguire su iPhone |
+| Stile | Alterna “Precisa”, “Deformata” e “Spirale” | Il tratto cambia stile e rimane ritagliato nel bordo stimato | Da eseguire su iPhone |
+| Quantità e misura | Porta “Numero di linee” fino a 30 e varia “Lunghezza delle linee” | Aumentano il numero e l'estensione dei segni, senza uscire dalla maschera | Da eseguire su iPhone |
 | Solo linee | Attiva “Solo linee” mentre l'oggetto è agganciato | Il video sparisce, lo sfondo resta scuro e sono visibili soltanto le linee ritagliate nella sagoma | Da eseguire su iPhone |
 | Palette | Alterna colori random / bianco e nero e usa “Genera nuovi colori” | La palette cambia; B/N resta monocromatico | Da eseguire su iPhone |
 | Caso difficile | Prova vetro, capelli, riflessi, poca luce o due soggetti sovrapposti | Possibili errori di bordo: passa alla sagoma manuale | Da eseguire su iPhone |
