@@ -1,96 +1,72 @@
 (() => {
   "use strict";
 
+  const MEDIAPIPE_BUNDLE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+  const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
+  const SEGMENTATION_MODEL = "https://storage.googleapis.com/mediapipe-assets/deeplabv3.tflite?generation=1661875711618421";
+  const MIN_OBJECT_AREA = 0.18;
+  const INFERENCE_INTERVAL_MS = 220;
+
   const elements = {
-    stage: document.querySelector("#stage"),
-    video: document.querySelector("#camera"),
-    frozenCanvas: document.querySelector("#frozen-frame"),
-    overlay: document.querySelector("#overlay"),
-    stageEmpty: document.querySelector("#stage-empty"),
-    stageNote: document.querySelector("#stage-note"),
-    status: document.querySelector("#status"),
-    startCamera: document.querySelector("#start-camera"),
-    stopCamera: document.querySelector("#stop-camera"),
-    freezeFrame: document.querySelector("#freeze-frame"),
-    liveFrame: document.querySelector("#live-frame"),
-    drawMask: document.querySelector("#draw-mask"),
-    clearMask: document.querySelector("#clear-mask"),
-    density: document.querySelector("#density"),
-    densityValue: document.querySelector("#density-value"),
-    speed: document.querySelector("#speed"),
-    speedValue: document.querySelector("#speed-value"),
-    newColors: document.querySelector("#new-colors"),
-    effectButtons: [...document.querySelectorAll("[data-effect]")],
-    colorButtons: [...document.querySelectorAll("[data-colors]")],
+    stage: document.querySelector("#stage"), video: document.querySelector("#camera"), frozenCanvas: document.querySelector("#frozen-frame"), overlay: document.querySelector("#overlay"), stageEmpty: document.querySelector("#stage-empty"), stageNote: document.querySelector("#stage-note"), status: document.querySelector("#status"),
+    startCamera: document.querySelector("#start-camera"), stopCamera: document.querySelector("#stop-camera"), autoMask: document.querySelector("#auto-mask"), freezeFrame: document.querySelector("#freeze-frame"), liveFrame: document.querySelector("#live-frame"), drawMask: document.querySelector("#draw-mask"), clearMask: document.querySelector("#clear-mask"),
+    density: document.querySelector("#density"), densityValue: document.querySelector("#density-value"), speed: document.querySelector("#speed"), speedValue: document.querySelector("#speed-value"), newColors: document.querySelector("#new-colors"), effectButtons: [...document.querySelectorAll("[data-effect]")], colorButtons: [...document.querySelectorAll("[data-colors]")],
   };
 
   const overlayContext = elements.overlay.getContext("2d");
   const frozenContext = elements.frozenCanvas.getContext("2d");
   const snapshotCanvas = document.createElement("canvas");
   const snapshotContext = snapshotCanvas.getContext("2d");
+  const maskCanvas = document.createElement("canvas");
+  const maskContext = maskCanvas.getContext("2d");
 
   const state = {
-    stream: null,
-    selection: [],
-    isDrawing: false,
-    drawArmed: false,
-    frozen: false,
-    hasSnapshot: false,
-    effect: "stripes",
-    colors: "color",
-    palette: createPalette(),
-    density: Number(elements.density.value),
-    speed: Number(elements.speed.value),
-    metrics: null,
-    lastFrame: 0,
+    stream: null, selection: [], isDrawing: false, drawArmed: false, frozen: false, hasSnapshot: false,
+    effect: "lines", colors: "color", palette: createPalette(), density: Number(elements.density.value), speed: Number(elements.speed.value), metrics: null, marks: createMotionMarks(),
+    auto: { enabled: true, loading: false, ready: false, failed: false, segmenter: null, hasMask: false, lastInferenceAt: 0, lastFoundAt: 0, lastStatusAt: 0, pauseUntil: 0 },
   };
 
   function createPalette() {
     const hue = Math.floor(Math.random() * 360);
-    return [0, 56, 125, 198, 264].map((offset, index) => {
-      const saturation = 75 + ((index * 9) % 18);
-      const lightness = 48 + ((index * 7) % 16);
-      return `hsl(${(hue + offset) % 360} ${saturation}% ${lightness}%)`;
-    });
+    return [0, 54, 122, 190, 258].map((offset, index) => `hsl(${(hue + offset) % 360} ${72 + ((index * 11) % 20)}% ${47 + ((index * 8) % 18)}%)`);
   }
 
-  function currentPalette() {
-    return state.colors === "mono"
-      ? ["#101012", "#f7f5ef", "#6e6e72", "#dedcd6"]
-      : state.palette;
+  function createMotionMarks() {
+    return Array.from({ length: 34 }, (_, index) => ({ x: Math.random(), y: Math.random(), phase: Math.random() * Math.PI * 2, drift: 0.35 + Math.random() * 0.9, size: 0.035 + Math.random() * 0.11, angle: Math.random() * Math.PI, color: index % 5, kind: index % 3 }));
   }
 
-  function setStatus(message) {
-    elements.status.textContent = message;
-  }
+  function currentPalette() { return state.colors === "mono" ? ["#f7f5ef", "#c8c6c0", "#77777c", "#ffffff"] : state.palette; }
+  function setStatus(message) { elements.status.textContent = message; }
+  function setStageNote(message) { elements.stageNote.textContent = message; }
 
-  function setStageNote(message) {
-    elements.stageNote.textContent = message;
+  function updateAutoButton() {
+    const { auto } = state;
+    elements.autoMask.setAttribute("aria-pressed", String(auto.enabled));
+    elements.autoMask.classList.toggle("button-accent", auto.enabled);
+    elements.autoMask.classList.toggle("button-secondary", !auto.enabled);
+    elements.autoMask.textContent = auto.loading ? "Carico riconoscimento…" : auto.failed ? "Riprova riconoscimento" : auto.enabled ? "Rilevamento: attivo" : "Rilevamento: spento";
   }
 
   function setControls(cameraOn) {
     elements.startCamera.disabled = cameraOn;
     elements.stopCamera.disabled = !cameraOn;
+    elements.autoMask.disabled = !cameraOn || state.auto.loading;
     elements.freezeFrame.disabled = !cameraOn;
     elements.liveFrame.disabled = !cameraOn || !state.frozen;
     elements.drawMask.disabled = !cameraOn;
-    elements.clearMask.disabled = state.selection.length === 0 && !state.isDrawing;
+    elements.clearMask.disabled = state.selection.length === 0 && !state.isDrawing && !state.auto.hasMask;
+    updateAutoButton();
   }
 
   function getMetrics() {
     const bounds = elements.stage.getBoundingClientRect();
-    const width = Math.max(1, bounds.width);
-    const height = Math.max(1, bounds.height);
-    return { width, height, scale: Math.min(window.devicePixelRatio || 1, 2) };
+    return { width: Math.max(1, bounds.width), height: Math.max(1, bounds.height), scale: Math.min(window.devicePixelRatio || 1, 2) };
   }
 
   function resizeCanvas(canvas, metrics) {
-    const pixelWidth = Math.round(metrics.width * metrics.scale);
-    const pixelHeight = Math.round(metrics.height * metrics.scale);
-    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-      canvas.width = pixelWidth;
-      canvas.height = pixelHeight;
-    }
+    const width = Math.round(metrics.width * metrics.scale);
+    const height = Math.round(metrics.height * metrics.scale);
+    if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
   }
 
   function prepareContext(context) {
@@ -99,11 +75,21 @@
     context.clearRect(0, 0, width, height);
   }
 
-  function renderVideoCover(context, source) {
+  function videoPlacement() {
     const { width, height } = state.metrics;
+    const sourceWidth = elements.video.videoWidth || 1;
+    const sourceHeight = elements.video.videoHeight || 1;
+    const scale = Math.max(width / sourceWidth, height / sourceHeight);
+    const drawWidth = sourceWidth * scale;
+    const drawHeight = sourceHeight * scale;
+    return { x: (width - drawWidth) / 2, y: (height - drawHeight) / 2, width: drawWidth, height: drawHeight };
+  }
+
+  function renderVideoCover(context, source) {
     const sourceWidth = source.videoWidth || source.width;
     const sourceHeight = source.videoHeight || source.height;
     if (!sourceWidth || !sourceHeight) return;
+    const { width, height } = state.metrics;
     const factor = Math.max(width / sourceWidth, height / sourceHeight);
     const drawWidth = sourceWidth * factor;
     const drawHeight = sourceHeight * factor;
@@ -118,29 +104,18 @@
     renderFrame(performance.now());
   }
 
-  function renderFrozenFrame() {
-    prepareContext(frozenContext);
-    renderVideoCover(frozenContext, snapshotCanvas);
-  }
+  function renderFrozenFrame() { prepareContext(frozenContext); renderVideoCover(frozenContext, snapshotCanvas); }
 
   function normalisedPoint(event) {
     const bounds = elements.overlay.getBoundingClientRect();
-    return {
-      x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
-      y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
-    };
+    return { x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)), y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)) };
   }
 
-  function pointOnCanvas(point) {
-    return { x: point.x * state.metrics.width, y: point.y * state.metrics.height };
-  }
+  function pointOnCanvas(point) { return { x: point.x * state.metrics.width, y: point.y * state.metrics.height }; }
 
   function appendPoint(point) {
     const previous = state.selection[state.selection.length - 1];
-    if (!previous) {
-      state.selection.push(point);
-      return;
-    }
+    if (!previous) { state.selection.push(point); return; }
     const dx = (point.x - previous.x) * state.metrics.width;
     const dy = (point.y - previous.y) * state.metrics.height;
     if (Math.hypot(dx, dy) >= 1.5) state.selection.push(point);
@@ -149,159 +124,223 @@
   function tracePath(context, points) {
     if (!points.length) return false;
     const first = pointOnCanvas(points[0]);
-    context.beginPath();
-    context.moveTo(first.x, first.y);
-    for (let index = 1; index < points.length; index += 1) {
-      const point = pointOnCanvas(points[index]);
-      context.lineTo(point.x, point.y);
-    }
+    context.beginPath(); context.moveTo(first.x, first.y);
+    for (let index = 1; index < points.length; index += 1) { const point = pointOnCanvas(points[index]); context.lineTo(point.x, point.y); }
     context.closePath();
     return true;
   }
 
-  function drawOutline(context, points, isComplete) {
+  function drawOutline(context, points, complete) {
     if (!points.length) return;
     const first = pointOnCanvas(points[0]);
-    context.save();
-    context.beginPath();
-    context.moveTo(first.x, first.y);
-    for (let index = 1; index < points.length; index += 1) {
-      const point = pointOnCanvas(points[index]);
-      context.lineTo(point.x, point.y);
-    }
-    if (isComplete) context.closePath();
-    context.lineJoin = "round";
-    context.lineCap = "round";
-    context.strokeStyle = "rgba(8, 8, 10, 0.82)";
-    context.lineWidth = 6;
-    context.stroke();
-    context.strokeStyle = "rgba(255, 255, 255, 0.97)";
-    context.lineWidth = 2;
-    if (isComplete) context.setLineDash([6, 5]);
-    context.stroke();
-    context.restore();
+    context.save(); context.beginPath(); context.moveTo(first.x, first.y);
+    for (let index = 1; index < points.length; index += 1) { const point = pointOnCanvas(points[index]); context.lineTo(point.x, point.y); }
+    if (complete) context.closePath();
+    context.lineJoin = "round"; context.lineCap = "round"; context.strokeStyle = "rgba(8, 8, 10, 0.82)"; context.lineWidth = 6; context.stroke();
+    context.strokeStyle = "rgba(255, 255, 255, 0.96)"; context.lineWidth = 2;
+    if (complete) context.setLineDash([6, 5]);
+    context.stroke(); context.restore();
   }
 
-  function drawStripes(context, time, palette) {
-    const { width, height } = state.metrics;
-    const gap = Math.max(22, 200 / Math.max(1, state.density));
-    const bandWidth = gap * 0.72;
-    const diagonal = Math.hypot(width, height) * 1.45;
-    const offset = ((time * (state.speed + 0.6) * 0.035) % gap) - gap;
+  function movingPoint(mark, time) {
+    const speed = 0.00016 * (state.speed + 0.6) * mark.drift;
+    const x = ((mark.x + Math.sin(time * speed + mark.phase) * 0.18) % 1 + 1) % 1;
+    const y = ((mark.y + Math.cos(time * speed * 1.21 + mark.phase) * 0.17) % 1 + 1) % 1;
+    return { x: x * state.metrics.width, y: y * state.metrics.height };
+  }
 
-    context.fillStyle = palette[0];
-    context.fillRect(0, 0, width, height);
-    context.save();
-    context.translate(width / 2, height / 2);
-    context.rotate(-0.54);
-    for (let x = -diagonal + offset, index = 0; x < diagonal; x += gap, index += 1) {
-      context.fillStyle = palette[Math.abs(index) % palette.length];
-      context.fillRect(x, -diagonal, bandWidth, diagonal * 2);
+  function drawFreeLines(context, time, palette, count) {
+    context.save(); context.lineCap = "round"; context.lineJoin = "round";
+    for (let index = 0; index < count; index += 1) {
+      const mark = state.marks[index % state.marks.length];
+      const point = movingPoint(mark, time);
+      const length = (38 + mark.size * 280) * (0.78 + state.density / 42);
+      const angle = mark.angle + Math.sin(time * 0.00027 * (state.speed + 0.5) + mark.phase) * 0.55;
+      const endX = point.x + Math.cos(angle) * length;
+      const endY = point.y + Math.sin(angle) * length;
+      const curve = Math.sin(time * 0.00045 + mark.phase) * length * 0.34;
+      context.strokeStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.58 + (index % 3) * 0.09; context.lineWidth = 2 + mark.size * 13;
+      context.beginPath(); context.moveTo(point.x, point.y);
+      context.quadraticCurveTo((point.x + endX) / 2 - Math.sin(angle) * curve, (point.y + endY) / 2 + Math.cos(angle) * curve, endX, endY);
+      context.stroke();
     }
     context.restore();
   }
 
-  function drawCircles(context, time, palette) {
-    const { width, height } = state.metrics;
-    const cell = Math.max(24, Math.min(width, height) / (state.density * 0.47));
-    const drift = (time * (state.speed + 0.2) * 0.024) % cell;
-    context.fillStyle = palette[0];
-    context.fillRect(0, 0, width, height);
-    let row = 0;
-    for (let y = -cell + drift; y < height + cell; y += cell, row += 1) {
-      let column = 0;
-      for (let x = -cell; x < width + cell; x += cell, column += 1) {
-        const wave = Math.sin(time * 0.0022 * (state.speed + 0.4) + row * 0.7 + column * 0.4);
-        const radius = cell * (0.27 + wave * 0.09);
-        context.fillStyle = palette[(row + column) % palette.length];
-        context.beginPath();
-        context.arc(x + cell / 2 + (row % 2 ? cell * 0.18 : 0), y + cell / 2, Math.max(3, radius), 0, Math.PI * 2);
-        context.fill();
-      }
+  function drawMovingShapes(context, time, palette, count) {
+    context.save();
+    for (let index = 0; index < count; index += 1) {
+      const mark = state.marks[index % state.marks.length];
+      const point = movingPoint(mark, time);
+      const size = 9 + mark.size * 72 * (0.76 + state.density / 40);
+      context.fillStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.62 + (index % 3) * 0.1;
+      context.save(); context.translate(point.x, point.y); context.rotate(mark.angle + time * 0.00009 * (state.speed + 0.5));
+      if (mark.kind === 0) { context.beginPath(); context.arc(0, 0, size * 0.58, 0, Math.PI * 2); context.fill(); }
+      else if (mark.kind === 1) context.fillRect(-size * 0.55, -size * 0.3, size * 1.1, size * 0.6);
+      else { context.beginPath(); context.moveTo(0, -size * 0.72); context.lineTo(size * 0.65, size * 0.52); context.lineTo(-size * 0.65, size * 0.52); context.closePath(); context.fill(); }
+      context.restore();
     }
+    context.restore();
+  }
+
+  function drawMotion(context, time) {
+    const count = Math.max(5, Math.min(state.marks.length, Math.round(3 + state.density * 0.58)));
+    const palette = currentPalette();
+    if (state.effect === "lines") drawFreeLines(context, time, palette, count);
+    else drawMovingShapes(context, time, palette, count);
+  }
+
+  function drawAutoEffect(context, time) {
+    if (!state.auto.hasMask || !maskCanvas.width) return;
+    context.save(); drawMotion(context, time);
+    const placement = videoPlacement();
+    context.globalCompositeOperation = "destination-in";
+    context.drawImage(maskCanvas, placement.x, placement.y, placement.width, placement.height);
+    context.restore();
   }
 
   function renderFrame(time) {
     if (!state.metrics) return;
     prepareContext(overlayContext);
     if (state.selection.length >= 3 && !state.isDrawing) {
-      overlayContext.save();
-      tracePath(overlayContext, state.selection);
-      overlayContext.clip();
-      const palette = currentPalette();
-      if (state.effect === "stripes") drawStripes(overlayContext, time, palette);
-      else drawCircles(overlayContext, time, palette);
-      overlayContext.restore();
-      drawOutline(overlayContext, state.selection, true);
-    } else if (state.selection.length) {
-      drawOutline(overlayContext, state.selection, false);
+      overlayContext.save(); tracePath(overlayContext, state.selection); overlayContext.clip(); drawMotion(overlayContext, time); overlayContext.restore(); drawOutline(overlayContext, state.selection, true);
+    } else if (state.isDrawing && state.selection.length) drawOutline(overlayContext, state.selection, false);
+    else if (state.auto.enabled && state.auto.hasMask && !state.frozen) drawAutoEffect(overlayContext, time);
+  }
+
+  function clearAutoMask() {
+    state.auto.hasMask = false;
+    if (maskCanvas.width && maskCanvas.height) maskContext.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+  }
+
+  function connectedComponent(values, width, height) {
+    const total = width * height;
+    const visited = new Uint8Array(total);
+    const queue = new Int32Array(total);
+    const minimumPixels = Math.ceil(total * MIN_OBJECT_AREA);
+    let best = null; let bestScore = 0;
+    for (let start = 0; start < total; start += 1) {
+      const category = values[start];
+      if (category === 0 || visited[start]) continue;
+      let head = 0; let tail = 0; let sumX = 0; let sumY = 0;
+      queue[tail++] = start; visited[start] = 1;
+      while (head < tail) {
+        const current = queue[head++]; const x = current % width; const y = Math.floor(current / width);
+        sumX += x; sumY += y;
+        const neighbours = [current - 1, current + 1, current - width, current + width];
+        for (const next of neighbours) {
+          if (next < 0 || next >= total || visited[next] || values[next] !== category) continue;
+          if ((next === current - 1 || next === current + 1) && Math.floor(next / width) !== y) continue;
+          visited[next] = 1; queue[tail++] = next;
+        }
+      }
+      if (tail < minimumPixels) continue;
+      const centerDistance = Math.hypot(sumX / tail / width - 0.5, sumY / tail / height - 0.5);
+      const score = tail * (1 - Math.min(0.28, centerDistance * 0.28));
+      if (score > bestScore) { bestScore = score; best = { pixels: queue.slice(0, tail) }; }
+    }
+    return best;
+  }
+
+  function consumeSegmentation(result) {
+    const categoryMask = result.categoryMask;
+    if (!categoryMask) return;
+    try {
+      const width = categoryMask.width; const height = categoryMask.height;
+      const component = connectedComponent(categoryMask.getAsUint8Array(), width, height);
+      const now = performance.now();
+      if (!component) { if (now - state.auto.lastFoundAt > 700) clearAutoMask(); return; }
+      if (maskCanvas.width !== width || maskCanvas.height !== height) { maskCanvas.width = width; maskCanvas.height = height; }
+      const image = maskContext.createImageData(width, height);
+      for (const pixel of component.pixels) { const offset = pixel * 4; image.data[offset] = 255; image.data[offset + 1] = 255; image.data[offset + 2] = 255; image.data[offset + 3] = 255; }
+      maskContext.putImageData(image, 0, 0);
+      state.auto.hasMask = true; state.auto.lastFoundAt = now;
+      if (now - state.auto.lastStatusAt > 1200) {
+        setStageNote("Oggetto grande agganciato");
+        setStatus("Oggetto grande rilevato. Le forme restano all'interno della sua maschera approssimata.");
+        state.auto.lastStatusAt = now;
+      }
+    } finally {
+      categoryMask.close?.();
+      result.confidenceMasks?.forEach((mask) => mask.close?.());
     }
   }
 
-  function animationLoop(time) {
-    if (!document.hidden) renderFrame(time);
-    state.lastFrame = requestAnimationFrame(animationLoop);
+  function runSegmentation(time) {
+    const { auto } = state;
+    if (!auto.enabled || !auto.ready || !auto.segmenter || auto.loading || state.frozen || document.hidden) return;
+    if (time < auto.pauseUntil || time - auto.lastInferenceAt < INFERENCE_INTERVAL_MS || elements.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    auto.lastInferenceAt = time;
+    try { auto.segmenter.segmentForVideo(elements.video, time, consumeSegmentation); }
+    catch (error) {
+      auto.failed = true; auto.enabled = false; clearAutoMask(); setStageNote("Rilevamento non disponibile"); setStatus("Il riconoscimento automatico non è riuscito ad avviarsi. Puoi usare la sagoma manuale."); setControls(Boolean(state.stream)); console.warn("Segmentation error", error);
+    }
+  }
+
+  async function initialiseSegmentation() {
+    if (state.auto.ready || state.auto.loading) return;
+    state.auto.loading = true; state.auto.failed = false; setControls(Boolean(state.stream));
+    setStageNote("Carico riconoscimento…"); setStatus("Carico il modello di segmentazione sul dispositivo. Potrebbe richiedere qualche istante al primo utilizzo.");
+    try {
+      const vision = await import(MEDIAPIPE_BUNDLE);
+      const fileset = await vision.FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
+      state.auto.segmenter = await vision.ImageSegmenter.createFromOptions(fileset, { baseOptions: { modelAssetPath: SEGMENTATION_MODEL }, runningMode: "VIDEO", outputCategoryMask: true, outputConfidenceMasks: false });
+      state.auto.ready = true; state.auto.loading = false; setStageNote("Cerco un oggetto grande"); setStatus("Rilevamento automatico pronto. Inquadra un oggetto grande, ben separato dallo sfondo.");
+    } catch (error) {
+      state.auto.loading = false; state.auto.ready = false; state.auto.failed = true; state.auto.enabled = false;
+      setStageNote("Rilevamento non disponibile"); setStatus("Non riesco a caricare il riconoscimento automatico. Verifica la connessione, poi prova di nuovo o usa la sagoma manuale."); console.warn("Segmentation setup error", error);
+    }
+    setControls(Boolean(state.stream));
+  }
+
+  function setAutoEnabled(enabled, announce = true) {
+    state.auto.enabled = enabled; state.auto.pauseUntil = performance.now() + 120; clearAutoMask();
+    if (enabled) {
+      state.selection = []; state.isDrawing = false; state.drawArmed = false; state.frozen = false; elements.frozenCanvas.classList.remove("is-visible");
+      if (state.stream) initialiseSegmentation();
+      if (announce) { setStageNote("Cerco un oggetto grande"); setStatus("Rilevamento automatico attivo. Cerca una sola regione grande e ignora gli oggetti piccoli."); }
+    } else if (announce) { setStageNote("Rilevamento in pausa"); setStatus("Rilevamento automatico in pausa. Puoi fissare un fotogramma e disegnare una sagoma manuale."); }
+    setControls(Boolean(state.stream));
+  }
+
+  function toggleAutoSegmentation() {
+    if (state.auto.failed) { state.auto.failed = false; state.auto.enabled = true; initialiseSegmentation(); return; }
+    setAutoEnabled(!state.auto.enabled);
   }
 
   function takeSnapshot() {
-    if (elements.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      setStatus("Attendi un istante: il flusso della fotocamera sta arrivando.");
-      return false;
-    }
-    const sourceWidth = elements.video.videoWidth;
-    const sourceHeight = elements.video.videoHeight;
-    const limit = 1440;
-    const factor = Math.min(1, limit / Math.max(sourceWidth, sourceHeight));
-    snapshotCanvas.width = Math.max(1, Math.round(sourceWidth * factor));
-    snapshotCanvas.height = Math.max(1, Math.round(sourceHeight * factor));
+    if (elements.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) { setStatus("Attendi un istante: il flusso della fotocamera sta arrivando."); return false; }
+    const sourceWidth = elements.video.videoWidth; const sourceHeight = elements.video.videoHeight; const factor = Math.min(1, 1440 / Math.max(sourceWidth, sourceHeight));
+    snapshotCanvas.width = Math.max(1, Math.round(sourceWidth * factor)); snapshotCanvas.height = Math.max(1, Math.round(sourceHeight * factor));
     snapshotContext.drawImage(elements.video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-    state.hasSnapshot = true;
-    state.frozen = true;
-    elements.frozenCanvas.classList.add("is-visible");
-    renderFrozenFrame();
-    setControls(true);
-    return true;
+    state.hasSnapshot = true; state.frozen = true; elements.frozenCanvas.classList.add("is-visible"); renderFrozenFrame(); setControls(true); return true;
   }
 
   function freezeCurrentFrame() {
+    setAutoEnabled(false, false);
     const hadMask = state.selection.length >= 3;
     if (!takeSnapshot()) return false;
     if (hadMask) state.selection = [];
-    state.drawArmed = false;
-    setStageNote("Fotogramma fissato");
-    setStatus(hadMask ? "Nuovo fotogramma fissato: la sagoma precedente è stata rimossa." : "Fotogramma fissato. Ora puoi disegnare il bordo dell'oggetto.");
-    setControls(true);
-    return true;
+    state.drawArmed = false; setStageNote("Fotogramma fissato"); setStatus(hadMask ? "Nuovo fotogramma fissato: la sagoma precedente è stata rimossa." : "Fotogramma fissato. Ora puoi disegnare il bordo dell'oggetto."); setControls(true); return true;
   }
 
   function returnToLive() {
     if (!state.stream) return;
-    state.frozen = false;
-    state.drawArmed = false;
-    elements.frozenCanvas.classList.remove("is-visible");
-    setStageNote("Anteprima live");
-    setStatus("Anteprima live. La sagoma resta visibile, ma per ridisegnarla fissa un nuovo fotogramma.");
-    setControls(true);
+    state.frozen = false; state.drawArmed = false; elements.frozenCanvas.classList.remove("is-visible"); setAutoEnabled(true, false);
+    setStageNote("Cerco un oggetto grande"); setStatus("Anteprima live. Il rilevamento automatico torna a cercare un oggetto grande."); setControls(true);
   }
 
   function armDrawing() {
     if (!state.stream) return;
+    setAutoEnabled(false, false);
     if (!state.frozen && !freezeCurrentFrame()) return;
-    state.selection = [];
-    state.drawArmed = true;
-    setStageNote("Traccia il contorno con un dito");
-    setStatus("Traccia senza sollevare il dito lungo il bordo dell'oggetto. Al rilascio, il riempimento apparirà dentro la sagoma.");
-    setControls(true);
+    state.selection = []; state.drawArmed = true; setStageNote("Traccia il contorno con un dito"); setStatus("Traccia senza sollevare il dito lungo il bordo dell'oggetto. Al rilascio, le forme appariranno nella sagoma."); setControls(true);
   }
 
   function clearMask() {
-    state.selection = [];
-    state.isDrawing = false;
-    state.drawArmed = false;
-    elements.overlay.classList.remove("is-drawing");
-    setStageNote(state.frozen ? "Fotogramma fissato" : "Anteprima live");
-    setStatus("Sagoma rimossa. Puoi disegnarne una nuova.");
-    setControls(Boolean(state.stream));
+    state.selection = []; state.isDrawing = false; state.drawArmed = false; state.auto.pauseUntil = performance.now() + 700; clearAutoMask(); elements.overlay.classList.remove("is-drawing");
+    setStageNote(state.auto.enabled ? "Cerco un oggetto grande" : state.frozen ? "Fotogramma fissato" : "Anteprima live");
+    setStatus(state.auto.enabled ? "Maschera rimossa. Il rilevamento automatico riprenderà tra un istante." : "Sagoma rimossa. Puoi disegnarne una nuova."); setControls(Boolean(state.stream));
   }
 
   function formatCameraError(error) {
@@ -313,148 +352,67 @@
   }
 
   async function startCamera() {
-    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setStatus("La fotocamera richiede Safari aggiornato e una pagina HTTPS (oppure localhost).");
-      return;
-    }
-    elements.startCamera.disabled = true;
-    setStatus("Richiesta di accesso alla fotocamera…");
-    let requestedStream = null;
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) { setStatus("La fotocamera richiede Safari aggiornato e una pagina HTTPS (oppure localhost)."); return; }
+    elements.startCamera.disabled = true; setStatus("Richiesta di accesso alla fotocamera…"); let requestedStream = null;
     try {
-      requestedStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      });
-      state.stream = requestedStream;
-      elements.video.srcObject = requestedStream;
-      await elements.video.play();
-      elements.stageEmpty.classList.add("is-hidden");
+      requestedStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      state.stream = requestedStream; elements.video.srcObject = requestedStream; await elements.video.play(); elements.stageEmpty.classList.add("is-hidden");
       const facingMode = requestedStream.getVideoTracks()[0]?.getSettings?.().facingMode;
-      setStageNote(facingMode === "user" ? "Fotocamera frontale attiva" : "Fotocamera posteriore richiesta");
-      setStatus(facingMode === "user" ? "Il dispositivo ha aperto la fotocamera frontale. Seleziona la posteriore nelle impostazioni del browser, se disponibile." : "Fotocamera attiva. Fissa un fotogramma per disegnare una sagoma precisa.");
-      setControls(true);
-      syncCanvases();
+      setStageNote(facingMode === "user" ? "Fotocamera frontale attiva" : "Carico riconoscimento…");
+      setStatus(facingMode === "user" ? "Il dispositivo ha aperto la fotocamera frontale. Seleziona la posteriore nelle impostazioni del browser, se disponibile." : "Fotocamera attiva. Preparo il rilevamento automatico dell'oggetto.");
+      setControls(true); syncCanvases(); setAutoEnabled(true, false); initialiseSegmentation();
     } catch (error) {
-      requestedStream?.getTracks().forEach((track) => track.stop());
-      elements.video.srcObject = null;
-      setStatus(formatCameraError(error));
-      state.stream = null;
-      setControls(false);
+      requestedStream?.getTracks().forEach((track) => track.stop()); elements.video.srcObject = null; setStatus(formatCameraError(error)); state.stream = null; setControls(false);
     }
   }
 
   function stopCamera() {
-    state.stream?.getTracks().forEach((track) => track.stop());
-    state.stream = null;
-    elements.video.srcObject = null;
-    state.frozen = false;
-    state.hasSnapshot = false;
-    state.selection = [];
-    state.isDrawing = false;
-    state.drawArmed = false;
-    elements.frozenCanvas.classList.remove("is-visible");
-    elements.stageEmpty.classList.remove("is-hidden");
-    setStageNote("Inquadra l'oggetto");
-    setStatus("Fotocamera chiusa. Nessun fotogramma viene salvato o caricato.");
-    setControls(false);
-    renderFrame(performance.now());
+    state.stream?.getTracks().forEach((track) => track.stop()); state.stream = null; elements.video.srcObject = null; state.frozen = false; state.hasSnapshot = false; state.selection = []; state.isDrawing = false; state.drawArmed = false; clearAutoMask();
+    elements.frozenCanvas.classList.remove("is-visible"); elements.stageEmpty.classList.remove("is-hidden"); setStageNote("Inquadra l'oggetto"); setStatus("Fotocamera chiusa. Nessun fotogramma viene salvato o caricato."); setControls(false); renderFrame(performance.now());
   }
 
   function onPointerDown(event) {
     if (!state.drawArmed || !state.frozen || !state.stream) return;
-    event.preventDefault();
-    state.isDrawing = true;
-    state.selection = [];
-    appendPoint(normalisedPoint(event));
-    elements.overlay.setPointerCapture?.(event.pointerId);
-    elements.overlay.classList.add("is-drawing");
-    setStageNote("Disegno in corso…");
-    setControls(true);
+    event.preventDefault(); state.isDrawing = true; state.selection = []; appendPoint(normalisedPoint(event)); elements.overlay.setPointerCapture?.(event.pointerId); elements.overlay.classList.add("is-drawing"); setStageNote("Disegno in corso…"); setControls(true);
   }
-
-  function onPointerMove(event) {
-    if (!state.isDrawing) return;
-    event.preventDefault();
-    appendPoint(normalisedPoint(event));
-  }
-
+  function onPointerMove(event) { if (!state.isDrawing) return; event.preventDefault(); appendPoint(normalisedPoint(event)); }
   function onPointerEnd(event) {
     if (!state.isDrawing) return;
-    event.preventDefault();
-    state.isDrawing = false;
-    elements.overlay.releasePointerCapture?.(event.pointerId);
-    elements.overlay.classList.remove("is-drawing");
-    if (state.selection.length < 12) {
-      state.selection = [];
-      setStatus("Il tratto è troppo breve. Riprova seguendo il bordo dell'oggetto con un gesto continuo.");
-      setStageNote("Traccia il contorno con un dito");
-      state.drawArmed = true;
-    } else {
-      state.drawArmed = false;
-      setStatus("Sagoma pronta. Il riempimento è opaco e resta confinato al suo interno.");
-      setStageNote("Sagoma attiva");
-    }
+    event.preventDefault(); state.isDrawing = false; elements.overlay.releasePointerCapture?.(event.pointerId); elements.overlay.classList.remove("is-drawing");
+    if (state.selection.length < 12) { state.selection = []; state.drawArmed = true; setStatus("Il tratto è troppo breve. Riprova seguendo il bordo dell'oggetto con un gesto continuo."); setStageNote("Traccia il contorno con un dito"); }
+    else { state.drawArmed = false; setStatus("Sagoma pronta. Le forme animate restano confinate al suo interno."); setStageNote("Sagoma manuale attiva"); }
     setControls(true);
   }
 
   function updateSegmented(buttons, selected) {
-    buttons.forEach((button) => {
-      const isSelected = button === selected;
-      button.classList.toggle("is-selected", isSelected);
-      button.setAttribute("aria-pressed", String(isSelected));
-    });
+    buttons.forEach((button) => { const isSelected = button === selected; button.classList.toggle("is-selected", isSelected); button.setAttribute("aria-pressed", String(isSelected)); });
+  }
+
+  function animationLoop(time) {
+    if (!document.hidden) { runSegmentation(time); renderFrame(time); }
+    requestAnimationFrame(animationLoop);
   }
 
   elements.startCamera.addEventListener("click", startCamera);
   elements.stopCamera.addEventListener("click", stopCamera);
+  elements.autoMask.addEventListener("click", toggleAutoSegmentation);
   elements.freezeFrame.addEventListener("click", freezeCurrentFrame);
   elements.liveFrame.addEventListener("click", returnToLive);
   elements.drawMask.addEventListener("click", armDrawing);
   elements.clearMask.addEventListener("click", clearMask);
-  elements.newColors.addEventListener("click", () => {
-    state.palette = createPalette();
-    if (state.colors === "color") setStatus("Nuova palette generata sul dispositivo.");
-  });
-
-  elements.effectButtons.forEach((button) => button.addEventListener("click", () => {
-    state.effect = button.dataset.effect;
-    updateSegmented(elements.effectButtons, button);
-  }));
-  elements.colorButtons.forEach((button) => button.addEventListener("click", () => {
-    state.colors = button.dataset.colors;
-    updateSegmented(elements.colorButtons, button);
-  }));
-  elements.density.addEventListener("input", () => {
-    state.density = Number(elements.density.value);
-    elements.densityValue.value = String(state.density);
-    elements.densityValue.textContent = String(state.density);
-  });
-  elements.speed.addEventListener("input", () => {
-    state.speed = Number(elements.speed.value);
-    elements.speedValue.value = String(state.speed);
-    elements.speedValue.textContent = String(state.speed);
-  });
-
+  elements.newColors.addEventListener("click", () => { state.palette = createPalette(); state.marks = createMotionMarks(); if (state.colors === "color") setStatus("Nuova palette e nuovo movimento generati sul dispositivo."); });
+  elements.effectButtons.forEach((button) => button.addEventListener("click", () => { state.effect = button.dataset.effect; updateSegmented(elements.effectButtons, button); }));
+  elements.colorButtons.forEach((button) => button.addEventListener("click", () => { state.colors = button.dataset.colors; updateSegmented(elements.colorButtons, button); }));
+  elements.density.addEventListener("input", () => { state.density = Number(elements.density.value); elements.densityValue.value = String(state.density); elements.densityValue.textContent = String(state.density); });
+  elements.speed.addEventListener("input", () => { state.speed = Number(elements.speed.value); elements.speedValue.value = String(state.speed); elements.speedValue.textContent = String(state.speed); });
   elements.overlay.addEventListener("pointerdown", onPointerDown);
   elements.overlay.addEventListener("pointermove", onPointerMove);
   elements.overlay.addEventListener("pointerup", onPointerEnd);
   elements.overlay.addEventListener("pointercancel", onPointerEnd);
   window.addEventListener("resize", syncCanvases);
-  window.addEventListener("orientationchange", () => {
-    if (state.selection.length) {
-      state.selection = [];
-      state.drawArmed = false;
-      setStatus("Orientamento cambiato: ridisegna la sagoma per mantenerla allineata al fotogramma.");
-    }
-    window.setTimeout(syncCanvases, 120);
-  });
+  window.addEventListener("orientationchange", () => { if (state.selection.length) { state.selection = []; state.drawArmed = false; setStatus("Orientamento cambiato: ridisegna la sagoma per mantenerla allineata al fotogramma."); } clearAutoMask(); window.setTimeout(syncCanvases, 120); });
   window.addEventListener("pagehide", () => state.stream?.getTracks().forEach((track) => track.stop()));
 
-  syncCanvases();
-  setControls(false);
-  state.lastFrame = requestAnimationFrame(animationLoop);
+  syncCanvases(); setControls(false); requestAnimationFrame(animationLoop);
 })();
+
