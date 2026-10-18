@@ -230,8 +230,10 @@ legend { margin-bottom: 8px; color: var(--muted); font-size: 0.78rem; font-weigh
 .segment { min-height: 42px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 0.8rem; font-weight: 700; cursor: pointer; }
 .segment:last-child { border-right: 0; }
 .segment.is-selected { background: var(--surface-2); color: var(--ink); }
-.segmented-three { grid-template-columns: repeat(3, 1fr); }
+.segmented-three { grid-template-columns: repeat(2, 1fr); }
 .segmented-three .segment { padding: 0 4px; font-size: 0.72rem; }
+.segmented-three .segment:nth-child(2) { border-right: 0; }
+.segmented-three .segment:last-child { grid-column: 1 / -1; border-top: 1px solid var(--line); }
 
 .range-group { margin-top: 16px; }
 .range-group label { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--muted); font-size: 0.8rem; }
