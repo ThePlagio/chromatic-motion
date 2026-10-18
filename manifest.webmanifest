@@ -1,0 +1,10 @@
+{
+  "name": "Chromatic Motion",
+  "short_name": "Chromatic",
+  "description": "Riempimenti animati dentro una sagoma disegnata sulla fotocamera.",
+  "display": "standalone",
+  "background_color": "#101014",
+  "theme_color": "#101014",
+  "lang": "it",
+  "start_url": "./"
+}
