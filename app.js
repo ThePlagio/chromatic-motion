@@ -10,7 +10,7 @@
   const elements = {
     stage: document.querySelector("#stage"), video: document.querySelector("#camera"), frozenCanvas: document.querySelector("#frozen-frame"), overlay: document.querySelector("#overlay"), stageEmpty: document.querySelector("#stage-empty"), stageNote: document.querySelector("#stage-note"), status: document.querySelector("#status"),
     startCamera: document.querySelector("#start-camera"), stopCamera: document.querySelector("#stop-camera"), autoMask: document.querySelector("#auto-mask"), freezeFrame: document.querySelector("#freeze-frame"), liveFrame: document.querySelector("#live-frame"), drawMask: document.querySelector("#draw-mask"), clearMask: document.querySelector("#clear-mask"),
-    density: document.querySelector("#density"), densityValue: document.querySelector("#density-value"), speed: document.querySelector("#speed"), speedValue: document.querySelector("#speed-value"), newColors: document.querySelector("#new-colors"), effectButtons: [...document.querySelectorAll("[data-effect]")], colorButtons: [...document.querySelectorAll("[data-colors]")], viewButtons: [...document.querySelectorAll("[data-view]")],
+    density: document.querySelector("#density"), densityValue: document.querySelector("#density-value"), lineSize: document.querySelector("#line-size"), lineSizeValue: document.querySelector("#line-size-value"), speed: document.querySelector("#speed"), speedValue: document.querySelector("#speed-value"), newColors: document.querySelector("#new-colors"), effectButtons: [...document.querySelectorAll("[data-effect]")], colorButtons: [...document.querySelectorAll("[data-colors]")], viewButtons: [...document.querySelectorAll("[data-view]")],
   };
 
   const overlayContext = elements.overlay.getContext("2d");
@@ -22,7 +22,7 @@
 
   const state = {
     stream: null, selection: [], isDrawing: false, drawArmed: false, frozen: false, hasSnapshot: false,
-    effect: "lines", colors: "mono", view: "camera", palette: createPalette(), density: Number(elements.density.value), speed: Number(elements.speed.value), metrics: null, marks: createMotionMarks(),
+    effect: "deformed", colors: "mono", view: "camera", palette: createPalette(), density: Number(elements.density.value), lineSize: Number(elements.lineSize.value), speed: Number(elements.speed.value), metrics: null, marks: createMotionMarks(),
     auto: { enabled: true, loading: false, ready: false, failed: false, segmenter: null, hasMask: false, lastInferenceAt: 0, lastFoundAt: 0, lastStatusAt: 0, pauseUntil: 0 },
   };
 
@@ -32,7 +32,7 @@
   }
 
   function createMotionMarks() {
-    return Array.from({ length: 34 }, (_, index) => ({ x: Math.random(), y: Math.random(), phase: Math.random() * Math.PI * 2, drift: 0.35 + Math.random() * 0.9, size: 0.035 + Math.random() * 0.11, angle: Math.random() * Math.PI, color: index % 5, kind: index % 3 }));
+    return Array.from({ length: 40 }, (_, index) => ({ x: Math.random(), y: Math.random(), phase: Math.random() * Math.PI * 2, drift: 0.35 + Math.random() * 0.9, size: 0.035 + Math.random() * 0.11, angle: Math.random() * Math.PI, color: index % 5, kind: index % 3 }));
   }
 
   function currentPalette() { return state.colors === "mono" ? ["#f7f5ef", "#c8c6c0", "#77777c", "#ffffff"] : state.palette; }
@@ -149,17 +149,33 @@
     return { x: x * state.metrics.width, y: y * state.metrics.height };
   }
 
+  function lineSpan(base, mark) { return base * (0.16 + state.lineSize / 145) * (0.74 + mark.size * 2.2); }
+  function lineWidth(mark) { return 1.6 + state.lineSize / 44 + mark.size * 8; }
+
+  function drawPreciseLines(context, time, palette, count) {
+    const base = Math.min(state.metrics.width, state.metrics.height);
+    context.save(); context.lineCap = "round";
+    for (let index = 0; index < count; index += 1) {
+      const mark = state.marks[index % state.marks.length]; const point = movingPoint(mark, time); const span = lineSpan(base, mark);
+      const angle = mark.angle + Math.sin(time * 0.0001 * (state.speed + 0.4) + mark.phase) * 0.12;
+      const cos = Math.cos(angle); const sin = Math.sin(angle); const startX = point.x - cos * span / 2; const startY = point.y - sin * span / 2; const endX = point.x + cos * span / 2; const endY = point.y + sin * span / 2;
+      context.strokeStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.67 + (index % 3) * 0.08; context.lineWidth = lineWidth(mark);
+      context.beginPath(); context.moveTo(startX, startY); context.quadraticCurveTo(point.x - sin * span * 0.025, point.y + cos * span * 0.025, endX, endY); context.stroke();
+    }
+    context.restore();
+  }
+
   function drawFreeLines(context, time, palette, count) {
     const base = Math.min(state.metrics.width, state.metrics.height);
-    const strokes = Math.max(3, Math.min(count, Math.round(2 + state.density * 0.38)));
+    const strokes = Math.max(1, Math.min(count, state.marks.length));
     context.save(); context.lineCap = "round"; context.lineJoin = "round";
     for (let index = 0; index < strokes; index += 1) {
       const mark = state.marks[index % state.marks.length];
       const point = movingPoint(mark, time);
-      const span = base * (0.42 + mark.size * 2.35) * (0.82 + state.density / 55);
+      const span = lineSpan(base, mark);
       const angle = mark.angle + Math.sin(time * 0.00015 * (state.speed + 0.5) + mark.phase) * 0.38;
       const cos = Math.cos(angle); const sin = Math.sin(angle);
-      context.strokeStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.62 + (index % 3) * 0.1; context.lineWidth = 2.1 + mark.size * 11;
+      context.strokeStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.62 + (index % 3) * 0.1; context.lineWidth = lineWidth(mark);
       context.beginPath();
       for (let node = 0; node <= 10; node += 1) {
         const progress = node / 10 - 0.5;
@@ -168,6 +184,23 @@
         const wobble = Math.sin(progress * 15 + time * 0.00063 * (state.speed + 0.3) + mark.phase) * span * 0.055;
         const x = point.x + cos * along - sin * (arc + wobble);
         const y = point.y + sin * along + cos * (arc + wobble);
+        if (node === 0) context.moveTo(x, y); else context.lineTo(x, y);
+      }
+      context.stroke();
+    }
+    context.restore();
+  }
+
+  function drawSpirals(context, time, palette, count) {
+    const base = Math.min(state.metrics.width, state.metrics.height); const spirals = Math.max(1, Math.min(7, Math.ceil(count / 5)));
+    context.save(); context.lineCap = "round"; context.lineJoin = "round";
+    for (let index = 0; index < spirals; index += 1) {
+      const mark = state.marks[index % state.marks.length]; const point = movingPoint(mark, time); const radius = lineSpan(base, mark) * 0.52; const turns = 1.3 + (index % 3) * 0.42;
+      context.strokeStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.72; context.lineWidth = lineWidth(mark);
+      context.beginPath();
+      for (let node = 0; node <= 56; node += 1) {
+        const progress = node / 56; const angle = mark.phase + progress * Math.PI * 2 * turns + time * 0.00022 * (state.speed + 0.4); const localRadius = radius * (0.12 + progress * 0.88);
+        const x = point.x + Math.cos(angle) * localRadius; const y = point.y + Math.sin(angle) * localRadius;
         if (node === 0) context.moveTo(x, y); else context.lineTo(x, y);
       }
       context.stroke();
@@ -192,10 +225,11 @@
   }
 
   function drawMotion(context, time) {
-    const count = Math.max(5, Math.min(state.marks.length, Math.round(3 + state.density * 0.58)));
+    const count = Math.max(1, Math.min(state.marks.length, Math.round(state.density)));
     const palette = currentPalette();
-    if (state.effect === "lines") drawFreeLines(context, time, palette, count);
-    else drawMovingShapes(context, time, palette, count);
+    if (state.effect === "precise") drawPreciseLines(context, time, palette, count);
+    else if (state.effect === "spiral") drawSpirals(context, time, palette, count);
+    else drawFreeLines(context, time, palette, count);
   }
 
   function drawAutoEffect(context, time) {
@@ -421,6 +455,7 @@
   elements.colorButtons.forEach((button) => button.addEventListener("click", () => { state.colors = button.dataset.colors; updateSegmented(elements.colorButtons, button); }));
   elements.viewButtons.forEach((button) => button.addEventListener("click", () => setView(button.dataset.view, button)));
   elements.density.addEventListener("input", () => { state.density = Number(elements.density.value); elements.densityValue.value = String(state.density); elements.densityValue.textContent = String(state.density); });
+  elements.lineSize.addEventListener("input", () => { state.lineSize = Number(elements.lineSize.value); elements.lineSizeValue.value = String(state.lineSize); elements.lineSizeValue.textContent = String(state.lineSize); });
   elements.speed.addEventListener("input", () => { state.speed = Number(elements.speed.value); elements.speedValue.value = String(state.speed); elements.speedValue.textContent = String(state.speed); });
   elements.overlay.addEventListener("pointerdown", onPointerDown);
   elements.overlay.addEventListener("pointermove", onPointerMove);
