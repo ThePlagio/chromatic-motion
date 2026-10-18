@@ -10,7 +10,7 @@
   const elements = {
     stage: document.querySelector("#stage"), video: document.querySelector("#camera"), frozenCanvas: document.querySelector("#frozen-frame"), overlay: document.querySelector("#overlay"), stageEmpty: document.querySelector("#stage-empty"), stageNote: document.querySelector("#stage-note"), status: document.querySelector("#status"),
     startCamera: document.querySelector("#start-camera"), stopCamera: document.querySelector("#stop-camera"), autoMask: document.querySelector("#auto-mask"), freezeFrame: document.querySelector("#freeze-frame"), liveFrame: document.querySelector("#live-frame"), drawMask: document.querySelector("#draw-mask"), clearMask: document.querySelector("#clear-mask"),
-    density: document.querySelector("#density"), densityValue: document.querySelector("#density-value"), speed: document.querySelector("#speed"), speedValue: document.querySelector("#speed-value"), newColors: document.querySelector("#new-colors"), effectButtons: [...document.querySelectorAll("[data-effect]")], colorButtons: [...document.querySelectorAll("[data-colors]")],
+    density: document.querySelector("#density"), densityValue: document.querySelector("#density-value"), speed: document.querySelector("#speed"), speedValue: document.querySelector("#speed-value"), newColors: document.querySelector("#new-colors"), effectButtons: [...document.querySelectorAll("[data-effect]")], colorButtons: [...document.querySelectorAll("[data-colors]")], viewButtons: [...document.querySelectorAll("[data-view]")],
   };
 
   const overlayContext = elements.overlay.getContext("2d");
@@ -22,7 +22,7 @@
 
   const state = {
     stream: null, selection: [], isDrawing: false, drawArmed: false, frozen: false, hasSnapshot: false,
-    effect: "lines", colors: "color", palette: createPalette(), density: Number(elements.density.value), speed: Number(elements.speed.value), metrics: null, marks: createMotionMarks(),
+    effect: "lines", colors: "mono", view: "camera", palette: createPalette(), density: Number(elements.density.value), speed: Number(elements.speed.value), metrics: null, marks: createMotionMarks(),
     auto: { enabled: true, loading: false, ready: false, failed: false, segmenter: null, hasMask: false, lastInferenceAt: 0, lastFoundAt: 0, lastStatusAt: 0, pauseUntil: 0 },
   };
 
@@ -150,18 +150,26 @@
   }
 
   function drawFreeLines(context, time, palette, count) {
+    const base = Math.min(state.metrics.width, state.metrics.height);
+    const strokes = Math.max(3, Math.min(count, Math.round(2 + state.density * 0.38)));
     context.save(); context.lineCap = "round"; context.lineJoin = "round";
-    for (let index = 0; index < count; index += 1) {
+    for (let index = 0; index < strokes; index += 1) {
       const mark = state.marks[index % state.marks.length];
       const point = movingPoint(mark, time);
-      const length = (38 + mark.size * 280) * (0.78 + state.density / 42);
-      const angle = mark.angle + Math.sin(time * 0.00027 * (state.speed + 0.5) + mark.phase) * 0.55;
-      const endX = point.x + Math.cos(angle) * length;
-      const endY = point.y + Math.sin(angle) * length;
-      const curve = Math.sin(time * 0.00045 + mark.phase) * length * 0.34;
-      context.strokeStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.58 + (index % 3) * 0.09; context.lineWidth = 2 + mark.size * 13;
-      context.beginPath(); context.moveTo(point.x, point.y);
-      context.quadraticCurveTo((point.x + endX) / 2 - Math.sin(angle) * curve, (point.y + endY) / 2 + Math.cos(angle) * curve, endX, endY);
+      const span = base * (0.42 + mark.size * 2.35) * (0.82 + state.density / 55);
+      const angle = mark.angle + Math.sin(time * 0.00015 * (state.speed + 0.5) + mark.phase) * 0.38;
+      const cos = Math.cos(angle); const sin = Math.sin(angle);
+      context.strokeStyle = palette[mark.color % palette.length]; context.globalAlpha = 0.62 + (index % 3) * 0.1; context.lineWidth = 2.1 + mark.size * 11;
+      context.beginPath();
+      for (let node = 0; node <= 10; node += 1) {
+        const progress = node / 10 - 0.5;
+        const along = progress * span;
+        const arc = Math.sin(progress * Math.PI * 2.1 + time * 0.00042 * (state.speed + 0.4) + mark.phase) * span * 0.13;
+        const wobble = Math.sin(progress * 15 + time * 0.00063 * (state.speed + 0.3) + mark.phase) * span * 0.055;
+        const x = point.x + cos * along - sin * (arc + wobble);
+        const y = point.y + sin * along + cos * (arc + wobble);
+        if (node === 0) context.moveTo(x, y); else context.lineTo(x, y);
+      }
       context.stroke();
     }
     context.restore();
@@ -388,6 +396,14 @@
     buttons.forEach((button) => { const isSelected = button === selected; button.classList.toggle("is-selected", isSelected); button.setAttribute("aria-pressed", String(isSelected)); });
   }
 
+  function setView(view, button) {
+    state.view = view;
+    elements.stage.classList.toggle("is-lines-only", view === "lines");
+    updateSegmented(elements.viewButtons, button);
+    if (!state.stream) return;
+    setStatus(view === "lines" ? "Solo linee attivo. La fotocamera continua a rilevare l'oggetto, ma il video è nascosto." : "Camera e linee attive. L'effetto resta ritagliato dentro la maschera dell'oggetto.");
+  }
+
   function animationLoop(time) {
     if (!document.hidden) { runSegmentation(time); renderFrame(time); }
     requestAnimationFrame(animationLoop);
@@ -403,6 +419,7 @@
   elements.newColors.addEventListener("click", () => { state.palette = createPalette(); state.marks = createMotionMarks(); if (state.colors === "color") setStatus("Nuova palette e nuovo movimento generati sul dispositivo."); });
   elements.effectButtons.forEach((button) => button.addEventListener("click", () => { state.effect = button.dataset.effect; updateSegmented(elements.effectButtons, button); }));
   elements.colorButtons.forEach((button) => button.addEventListener("click", () => { state.colors = button.dataset.colors; updateSegmented(elements.colorButtons, button); }));
+  elements.viewButtons.forEach((button) => button.addEventListener("click", () => setView(button.dataset.view, button)));
   elements.density.addEventListener("input", () => { state.density = Number(elements.density.value); elements.densityValue.value = String(state.density); elements.densityValue.textContent = String(state.density); });
   elements.speed.addEventListener("input", () => { state.speed = Number(elements.speed.value); elements.speedValue.value = String(state.speed); elements.speedValue.textContent = String(state.speed); });
   elements.overlay.addEventListener("pointerdown", onPointerDown);
