@@ -55,7 +55,7 @@
         <section class="panel" aria-labelledby="effect-title">
           <div class="section-heading">
             <p class="step">02</p>
-            <h2 id="effect-title">Muovi il riempimento</h2>
+            <h2 id="effect-title">Muovi le linee</h2>
           </div>
 
           <fieldset>
@@ -69,8 +69,16 @@
           <fieldset>
             <legend>Palette</legend>
             <div class="segmented" role="group" aria-label="Palette dei colori">
-              <button class="segment is-selected" type="button" data-colors="color" aria-pressed="true">Colori random</button>
-              <button class="segment" type="button" data-colors="mono" aria-pressed="false">Bianco e nero</button>
+              <button class="segment" type="button" data-colors="color" aria-pressed="false">Colori random</button>
+              <button class="segment is-selected" type="button" data-colors="mono" aria-pressed="true">Bianco e nero</button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Visualizzazione</legend>
+            <div class="segmented" role="group" aria-label="Visualizzazione della scena">
+              <button class="segment is-selected" type="button" data-view="camera" aria-pressed="true">Camera + linee</button>
+              <button class="segment" type="button" data-view="lines" aria-pressed="false">Solo linee</button>
             </div>
           </fieldset>
 
@@ -87,7 +95,7 @@
 
         <details class="info-panel">
           <summary>Come funziona e limiti del prototipo</summary>
-          <p>Il rilevamento cerca la regione segmentata più grande e non di sfondo; non misura davvero la distanza e non riconosce ogni possibile oggetto. Capelli, vetro, superfici riflettenti, elementi sottili, soggetti sovrapposti e sfondi simili possono produrre una maschera imprecisa. Il video resta elaborato nel browser; al primo uso vengono scaricati runtime e modello di segmentazione pubblici.</p>
+          <p>Il rilevamento cerca la regione segmentata più grande e non di sfondo; non misura davvero la distanza e non riconosce ogni possibile oggetto. Le linee lunghe e gestuali vengono ritagliate dentro la maschera; “Solo linee” nasconde il video senza spegnere la fotocamera. Capelli, vetro, superfici riflettenti, elementi sottili, soggetti sovrapposti e sfondi simili possono produrre una maschera imprecisa. Il video resta elaborato nel browser; al primo uso vengono scaricati runtime e modello di segmentazione pubblici.</p>
         </details>
       </main>
 
