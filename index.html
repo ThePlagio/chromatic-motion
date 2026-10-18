@@ -59,10 +59,11 @@
           </div>
 
           <fieldset>
-            <legend>Forma</legend>
-            <div class="segmented" role="group" aria-label="Forma del riempimento">
-              <button class="segment is-selected" type="button" data-effect="lines" aria-pressed="true">Linee libere</button>
-              <button class="segment" type="button" data-effect="shapes" aria-pressed="false">Forme</button>
+            <legend>Stile della linea</legend>
+            <div class="segmented segmented-three" role="group" aria-label="Stile della linea">
+              <button class="segment" type="button" data-effect="precise" aria-pressed="false">Precisa</button>
+              <button class="segment is-selected" type="button" data-effect="deformed" aria-pressed="true">Deformata</button>
+              <button class="segment" type="button" data-effect="spiral" aria-pressed="false">Spirale</button>
             </div>
           </fieldset>
 
@@ -83,8 +84,12 @@
           </fieldset>
 
           <div class="range-group">
-            <label for="density">Densità <output id="density-value" for="density">10</output></label>
-            <input id="density" type="range" min="3" max="22" value="10" />
+            <label for="density">Numero di linee <output id="density-value" for="density">10</output></label>
+            <input id="density" type="range" min="2" max="30" value="10" />
+          </div>
+          <div class="range-group">
+            <label for="line-size">Lunghezza delle linee <output id="line-size-value" for="line-size">65</output></label>
+            <input id="line-size" type="range" min="20" max="100" value="65" />
           </div>
           <div class="range-group">
             <label for="speed">Velocità <output id="speed-value" for="speed">5</output></label>
