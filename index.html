@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#101014" />
-    <meta name="description" content="Chromatic Motion — riempimenti animati dentro una sagoma disegnata sulla fotocamera." />
+    <meta name="description" content="Chromatic Motion — forme animate dentro un oggetto grande riconosciuto dalla fotocamera." />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
     <title>Chromatic Motion</title>
@@ -38,17 +38,18 @@
         <section class="panel camera-panel" aria-labelledby="camera-title">
           <div class="section-heading">
             <p class="step">01</p>
-            <h2 id="camera-title">Inquadra e crea la sagoma</h2>
+            <h2 id="camera-title">Inquadra e riconosci l'oggetto</h2>
           </div>
           <div class="button-grid">
             <button class="button button-primary" id="start-camera" type="button">Apri fotocamera posteriore</button>
             <button class="button button-secondary" id="stop-camera" type="button" disabled>Chiudi</button>
+            <button class="button button-accent" id="auto-mask" type="button" aria-pressed="true" disabled>Rilevamento automatico</button>
             <button class="button button-secondary" id="freeze-frame" type="button" disabled>Fissa fotogramma</button>
             <button class="button button-secondary" id="live-frame" type="button" disabled>Torna al live</button>
-            <button class="button button-accent" id="draw-mask" type="button" disabled>Disegna sagoma</button>
+            <button class="button button-secondary" id="draw-mask" type="button" disabled>Disegna a mano</button>
             <button class="button button-quiet" id="clear-mask" type="button" disabled>Reimposta sagoma</button>
           </div>
-          <p class="help">Per una selezione più precisa, fissa il fotogramma e traccia con un solo gesto il bordo dell'oggetto. Il contorno si chiude quando sollevi il dito.</p>
+          <p class="help">Il rilevamento cerca una sola regione grande in primo piano e ignora quelle piccole. Se sbaglia, fissa un fotogramma e disegna la sagoma a mano.</p>
         </section>
 
         <section class="panel" aria-labelledby="effect-title">
@@ -60,8 +61,8 @@
           <fieldset>
             <legend>Forma</legend>
             <div class="segmented" role="group" aria-label="Forma del riempimento">
-              <button class="segment is-selected" type="button" data-effect="stripes" aria-pressed="true">Strisce</button>
-              <button class="segment" type="button" data-effect="circles" aria-pressed="false">Cerchi</button>
+              <button class="segment is-selected" type="button" data-effect="lines" aria-pressed="true">Linee libere</button>
+              <button class="segment" type="button" data-effect="shapes" aria-pressed="false">Forme</button>
             </div>
           </fieldset>
 
@@ -86,12 +87,13 @@
 
         <details class="info-panel">
           <summary>Come funziona e limiti del prototipo</summary>
-          <p>La maschera è manuale: non vengono inviati video, foto o coordinate a un server. La segmentazione automatica non è inclusa perché, sul web mobile, può perdere capelli, bordi sottili, oggetti sovrapposti e soggetti poco contrastati; inoltre può rallentare l'anteprima su alcuni dispositivi.</p>
+          <p>Il rilevamento cerca la regione segmentata più grande e non di sfondo; non misura davvero la distanza e non riconosce ogni possibile oggetto. Capelli, vetro, superfici riflettenti, elementi sottili, soggetti sovrapposti e sfondi simili possono produrre una maschera imprecisa. Il video resta elaborato nel browser; al primo uso vengono scaricati runtime e modello di segmentazione pubblici.</p>
         </details>
       </main>
 
-      <footer>Chromatic Motion · prototipo locale</footer>
+      <footer>Chromatic Motion · segmentazione visiva in prova</footer>
     </div>
     <script src="app.js"></script>
   </body>
 </html>
+
