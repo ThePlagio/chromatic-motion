@@ -102,6 +102,7 @@ video, canvas {
 video {
   object-fit: cover;
   background: #070708;
+  transition: opacity 180ms ease;
 }
 
 #frozen-frame {
@@ -110,6 +111,15 @@ video {
 }
 
 #frozen-frame.is-visible { display: block; }
+
+.stage.is-lines-only {
+  background: #09090c;
+}
+
+.stage.is-lines-only video,
+.stage.is-lines-only #frozen-frame {
+  opacity: 0;
+}
 
 #overlay {
   z-index: 2;
@@ -241,3 +251,4 @@ footer { margin: 22px 0 2px; color: #77737d; text-align: center; font-size: 0.72
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
