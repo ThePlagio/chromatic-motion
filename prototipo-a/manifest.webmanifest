@@ -1,0 +1,10 @@
+{
+  "name": "Chromatic Motion",
+  "short_name": "Chromatic",
+  "description": "Forme animate dentro un oggetto grande rilevato dalla fotocamera.",
+  "display": "standalone",
+  "background_color": "#101014",
+  "theme_color": "#101014",
+  "lang": "it",
+  "start_url": "./"
+}
