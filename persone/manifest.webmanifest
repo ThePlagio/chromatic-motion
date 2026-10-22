@@ -1,0 +1,11 @@
+{
+  "name": "Chromatic Motion · Persone",
+  "short_name": "Persone",
+  "description": "Prova di segmentazione delle persone dalla fotocamera.",
+  "display": "standalone",
+  "background_color": "#101014",
+  "theme_color": "#101014",
+  "lang": "it",
+  "start_url": "./"
+}
+
