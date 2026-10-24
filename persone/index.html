@@ -46,10 +46,18 @@
             <button class="button button-accent" id="auto-mask" type="button" aria-pressed="true" disabled>Rilevamento automatico</button>
             <button class="button button-secondary" id="freeze-frame" type="button" disabled>Fissa fotogramma</button>
             <button class="button button-secondary" id="live-frame" type="button" disabled>Torna al live</button>
+            <button class="button button-record" id="start-recording" type="button" disabled>● Registra test</button>
+            <button class="button button-secondary" id="stop-recording" type="button" disabled>Ferma registrazione</button>
             <button class="button button-secondary" id="draw-mask" type="button" disabled>Disegna a mano</button>
             <button class="button button-quiet" id="clear-mask" type="button" disabled>Reimposta sagoma</button>
           </div>
-          <p class="help">Il modello cerca persone, non oggetti generici. È pensato soprattutto per soggetti vicini; può includere lo sfondo o perdere parti della figura. La sagoma a mano funziona su un fotogramma fermo.</p>
+          <p class="help">Registra fino a 30 secondi della scena, inclusa la maschera o le linee scelte. Il filmato è senza audio e resta sul dispositivo finché non scegli di salvarlo o condividerlo.</p>
+          <p class="recording-info" id="recording-info" hidden aria-live="polite">Registrazione in corso · <output id="recording-time">0:00</output></p>
+          <video class="recording-preview" id="recording-preview" controls playsinline hidden aria-label="Anteprima del test registrato"></video>
+          <div class="recording-actions" id="recording-actions" hidden>
+            <button class="button button-primary" id="share-recording" type="button" disabled>Condividi il video</button>
+            <a class="button button-secondary" id="download-recording" hidden>Salva il video</a>
+          </div>
         </section>
 
         <section class="panel" aria-labelledby="effect-title">
