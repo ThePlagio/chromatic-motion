@@ -217,10 +217,15 @@ video {
 .button-primary { grid-column: span 2; background: var(--accent); color: var(--accent-ink); }
 .button-secondary { border-color: var(--line); background: var(--surface-2); color: var(--ink); }
 .button-accent { border-color: var(--accent); background: #202516; color: var(--accent); }
+.button-record { border-color: rgba(255, 142, 142, 0.75); background: #321e25; color: #ffb5b5; }
 .button-quiet { border-color: transparent; background: transparent; color: var(--muted); }
 .full-width { width: 100%; margin-top: 15px; }
 
 .help { margin: 12px 0 0; color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
+.recording-info { margin: 12px 0 0; color: #ffb5b5; font-size: 0.8rem; font-weight: 750; }
+.recording-preview { width: 100%; max-height: 330px; margin-top: 14px; border: 1px solid var(--line); border-radius: 13px; background: #050506; }
+.recording-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 10px; }
+.recording-actions .button { display: grid; place-items: center; text-align: center; text-decoration: none; }
 
 fieldset { min-width: 0; margin: 0 0 14px; padding: 0; border: 0; }
 legend { margin-bottom: 8px; color: var(--muted); font-size: 0.78rem; font-weight: 650; }
