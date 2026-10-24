@@ -8,7 +8,7 @@
 
   const elements = {
     stage: document.querySelector("#stage"), video: document.querySelector("#camera"), frozenCanvas: document.querySelector("#frozen-frame"), overlay: document.querySelector("#overlay"), stageEmpty: document.querySelector("#stage-empty"), stageNote: document.querySelector("#stage-note"), status: document.querySelector("#status"),
-    startCamera: document.querySelector("#start-camera"), stopCamera: document.querySelector("#stop-camera"), autoMask: document.querySelector("#auto-mask"), freezeFrame: document.querySelector("#freeze-frame"), liveFrame: document.querySelector("#live-frame"), drawMask: document.querySelector("#draw-mask"), clearMask: document.querySelector("#clear-mask"),
+    startCamera: document.querySelector("#start-camera"), stopCamera: document.querySelector("#stop-camera"), autoMask: document.querySelector("#auto-mask"), freezeFrame: document.querySelector("#freeze-frame"), liveFrame: document.querySelector("#live-frame"), drawMask: document.querySelector("#draw-mask"), clearMask: document.querySelector("#clear-mask"), startRecording: document.querySelector("#start-recording"), stopRecording: document.querySelector("#stop-recording"), recordingInfo: document.querySelector("#recording-info"), recordingTime: document.querySelector("#recording-time"), recordingPreview: document.querySelector("#recording-preview"), recordingActions: document.querySelector("#recording-actions"), shareRecording: document.querySelector("#share-recording"), downloadRecording: document.querySelector("#download-recording"),
     density: document.querySelector("#density"), densityValue: document.querySelector("#density-value"), lineSize: document.querySelector("#line-size"), lineSizeValue: document.querySelector("#line-size-value"), speed: document.querySelector("#speed"), speedValue: document.querySelector("#speed-value"), newColors: document.querySelector("#new-colors"), effectButtons: [...document.querySelectorAll("[data-effect]")], colorButtons: [...document.querySelectorAll("[data-colors]")], viewButtons: [...document.querySelectorAll("[data-view]")],
   };
 
@@ -23,6 +23,7 @@
     stream: null, selection: [], isDrawing: false, drawArmed: false, frozen: false, hasSnapshot: false,
     effect: "deformed", colors: "mono", view: "mask", palette: createPalette(), density: Number(elements.density.value), lineSize: Number(elements.lineSize.value), speed: Number(elements.speed.value), metrics: null, marks: createMotionMarks(),
     auto: { enabled: true, loading: false, ready: false, failed: false, segmenter: null, hasMask: false, lastInferenceAt: 0, lastFoundAt: 0, lastStatusAt: 0, pauseUntil: 0 },
+    recording: { active: false, stopping: false, recorder: null, stream: null, canvas: null, context: null, frameId: 0, timerId: 0, startedAt: 0, file: null, url: null },
   };
 
   function createPalette() {
@@ -47,13 +48,16 @@
   }
 
   function setControls(cameraOn) {
+    const isRecording = state.recording.active || state.recording.stopping;
     elements.startCamera.disabled = cameraOn;
-    elements.stopCamera.disabled = !cameraOn;
-    elements.autoMask.disabled = !cameraOn || state.auto.loading;
-    elements.freezeFrame.disabled = !cameraOn;
-    elements.liveFrame.disabled = !cameraOn || !state.frozen;
-    elements.drawMask.disabled = !cameraOn;
-    elements.clearMask.disabled = state.selection.length === 0 && !state.isDrawing && !state.auto.hasMask;
+    elements.stopCamera.disabled = !cameraOn || isRecording;
+    elements.autoMask.disabled = !cameraOn || state.auto.loading || isRecording;
+    elements.freezeFrame.disabled = !cameraOn || isRecording;
+    elements.liveFrame.disabled = !cameraOn || !state.frozen || isRecording;
+    elements.drawMask.disabled = !cameraOn || isRecording;
+    elements.clearMask.disabled = isRecording || (state.selection.length === 0 && !state.isDrawing && !state.auto.hasMask);
+    elements.startRecording.disabled = !cameraOn || isRecording;
+    elements.stopRecording.disabled = !state.recording.active || state.recording.stopping;
     updateAutoButton();
   }
 
@@ -376,6 +380,115 @@
     setStatus(state.auto.enabled ? "Maschera rimossa. Il rilevamento automatico riprenderà tra un istante." : "Sagoma rimossa. Puoi disegnarne una nuova."); setControls(Boolean(state.stream));
   }
 
+  function formatDuration(milliseconds) {
+    const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  }
+
+  function clearRecordedVideo() {
+    if (state.recording.url) URL.revokeObjectURL(state.recording.url);
+    state.recording.file = null; state.recording.url = null;
+    elements.recordingPreview.pause?.(); elements.recordingPreview.removeAttribute("src"); elements.recordingPreview.hidden = true;
+    elements.recordingActions.hidden = true; elements.shareRecording.disabled = true;
+    elements.downloadRecording.removeAttribute("href"); elements.downloadRecording.hidden = true;
+  }
+
+  function recordingMimeType() {
+    if (!window.MediaRecorder) return "";
+    const candidates = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp8", "video/webm"];
+    return candidates.find((type) => MediaRecorder.isTypeSupported?.(type)) || "";
+  }
+
+  function recordCompositeFrame() {
+    const recording = state.recording;
+    if (!recording.active || !recording.context || !recording.canvas || !state.metrics) return;
+    const { context, canvas } = recording;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (state.view !== "lines") {
+      const source = state.frozen && state.hasSnapshot ? snapshotCanvas : elements.video;
+      const sourceWidth = source.videoWidth || source.width;
+      const sourceHeight = source.videoHeight || source.height;
+      if (sourceWidth && sourceHeight) {
+        const factor = Math.max(canvas.width / sourceWidth, canvas.height / sourceHeight);
+        const width = sourceWidth * factor; const height = sourceHeight * factor;
+        context.drawImage(source, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+      }
+    } else {
+      context.fillStyle = "#09090c"; context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    context.drawImage(elements.overlay, 0, 0, canvas.width, canvas.height);
+    recording.frameId = requestAnimationFrame(recordCompositeFrame);
+  }
+
+  function stopRecordingCapture() {
+    const recording = state.recording;
+    if (recording.frameId) cancelAnimationFrame(recording.frameId);
+    if (recording.timerId) window.clearInterval(recording.timerId);
+    recording.frameId = 0; recording.timerId = 0;
+    recording.stream?.getTracks().forEach((track) => track.stop()); recording.stream = null;
+  }
+
+  function finishRecording(chunks, mimeType) {
+    const recording = state.recording;
+    const actualType = mimeType || "video/mp4";
+    const blob = new Blob(chunks, { type: actualType });
+    recording.active = false; recording.stopping = false; recording.recorder = null;
+    if (!blob.size) { setStatus("Il video non contiene dati. Riprova con una registrazione breve."); setControls(Boolean(state.stream)); return; }
+    const extension = actualType.includes("mp4") ? "mp4" : "webm";
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const file = new File([blob], `chromatic-motion-test-${stamp}.${extension}`, { type: actualType });
+    recording.file = file; recording.url = URL.createObjectURL(file);
+    elements.recordingPreview.src = recording.url; elements.recordingPreview.hidden = false;
+    elements.recordingActions.hidden = false;
+    elements.downloadRecording.href = recording.url; elements.downloadRecording.download = file.name; elements.downloadRecording.hidden = false;
+    const shareable = Boolean(navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] })));
+    elements.shareRecording.disabled = !shareable;
+    setStatus(shareable ? "Video pronto. Tocca “Condividi il video” e scegli dove inviarlo, oppure salvalo." : "Video pronto. Tocca “Salva il video”, poi allegalo qui.");
+    setControls(Boolean(state.stream));
+  }
+
+  function startRecording() {
+    if (!state.stream) return;
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) { setStatus("Questo Safari non supporta la registrazione dal prototipo. Puoi registrare lo schermo dell'iPhone come alternativa."); return; }
+    clearRecordedVideo();
+    const canvas = document.createElement("canvas");
+    canvas.width = elements.overlay.width; canvas.height = elements.overlay.height;
+    const context = canvas.getContext("2d");
+    if (!context || !canvas.width || !canvas.height) { setStatus("La registrazione non può partire: l'anteprima non è pronta."); return; }
+    const stream = canvas.captureStream(24); const preferredType = recordingMimeType();
+    let recorder;
+    try { recorder = preferredType ? new MediaRecorder(stream, { mimeType: preferredType }) : new MediaRecorder(stream); }
+    catch (error) { stream.getTracks().forEach((track) => track.stop()); setStatus("Safari non riesce ad avviare questo formato video. Prova a registrare lo schermo dell'iPhone."); console.warn("Recording setup error", error); return; }
+    const chunks = [];
+    state.recording = { active: true, stopping: false, recorder, stream, canvas, context, frameId: 0, timerId: 0, startedAt: performance.now(), file: null, url: null };
+    recorder.ondataavailable = (event) => { if (event.data?.size) chunks.push(event.data); };
+    recorder.onerror = (event) => { stopRecordingCapture(); state.recording.active = false; state.recording.stopping = false; setStatus("La registrazione si è interrotta. Riprova con un video più breve."); setControls(Boolean(state.stream)); console.warn("Recording error", event); };
+    recorder.onstop = () => { stopRecordingCapture(); finishRecording(chunks, recorder.mimeType || preferredType); };
+    recorder.start(); recordCompositeFrame();
+    state.recording.timerId = window.setInterval(() => {
+      const elapsed = performance.now() - state.recording.startedAt;
+      elements.recordingTime.value = formatDuration(elapsed); elements.recordingTime.textContent = formatDuration(elapsed);
+      if (elapsed >= 30000) stopRecording(true);
+    }, 250);
+    elements.recordingInfo.hidden = false; elements.recordingTime.value = "0:00"; elements.recordingTime.textContent = "0:00";
+    setStageNote("Registrazione in corso"); setStatus("Registrazione avviata: massimo 30 secondi, senza audio."); setControls(true);
+  }
+
+  function stopRecording(automatic = false) {
+    const recording = state.recording;
+    if (!recording.active || recording.stopping) return;
+    recording.stopping = true; elements.recordingInfo.hidden = true;
+    setStatus(automatic ? "Limite di 30 secondi raggiunto: preparo il video…" : "Preparo il video…"); setControls(Boolean(state.stream));
+    try { recording.recorder.stop(); } catch (error) { stopRecordingCapture(); recording.active = false; recording.stopping = false; setStatus("Non riesco a terminare il video. Riprova."); setControls(Boolean(state.stream)); }
+  }
+
+  async function shareRecordedVideo() {
+    const file = state.recording.file;
+    if (!file || !navigator.share) { setStatus("Tocca “Salva il video”, poi allega il file qui."); return; }
+    try { await navigator.share({ files: [file], title: "Chromatic Motion — test maschera" }); }
+    catch (error) { if (error?.name !== "AbortError") { setStatus("Non riesco a condividere questo formato. Salva il video e allegalo qui."); console.warn("Share error", error); } }
+  }
+
   function formatCameraError(error) {
     if (error?.name === "NotAllowedError") return "Permesso fotocamera negato. Abilitalo nelle impostazioni di Safari e riprova.";
     if (error?.name === "NotFoundError") return "Nessuna fotocamera disponibile su questo dispositivo.";
@@ -400,6 +513,7 @@
   }
 
   function stopCamera() {
+    if (state.recording.active) { stopRecording(); return; }
     state.stream?.getTracks().forEach((track) => track.stop()); state.stream = null; elements.video.srcObject = null; state.frozen = false; state.hasSnapshot = false; state.selection = []; state.isDrawing = false; state.drawArmed = false; clearAutoMask();
     elements.frozenCanvas.classList.remove("is-visible"); elements.stageEmpty.classList.remove("is-hidden"); setStageNote("Inquadra una persona"); setStatus("Fotocamera chiusa. Nessun fotogramma viene salvato o caricato."); setControls(false); renderFrame(performance.now());
   }
@@ -439,6 +553,9 @@
   elements.autoMask.addEventListener("click", toggleAutoSegmentation);
   elements.freezeFrame.addEventListener("click", freezeCurrentFrame);
   elements.liveFrame.addEventListener("click", returnToLive);
+  elements.startRecording.addEventListener("click", startRecording);
+  elements.stopRecording.addEventListener("click", () => stopRecording(false));
+  elements.shareRecording.addEventListener("click", shareRecordedVideo);
   elements.drawMask.addEventListener("click", armDrawing);
   elements.clearMask.addEventListener("click", clearMask);
   elements.newColors.addEventListener("click", () => { state.palette = createPalette(); state.marks = createMotionMarks(); if (state.colors === "color") setStatus("Nuova palette e nuovo movimento generati sul dispositivo."); });
@@ -454,7 +571,7 @@
   elements.overlay.addEventListener("pointercancel", onPointerEnd);
   window.addEventListener("resize", syncCanvases);
   window.addEventListener("orientationchange", () => { if (state.selection.length) { state.selection = []; state.drawArmed = false; setStatus("Orientamento cambiato: ridisegna la sagoma per mantenerla allineata al fotogramma."); } clearAutoMask(); window.setTimeout(syncCanvases, 120); });
-  window.addEventListener("pagehide", () => state.stream?.getTracks().forEach((track) => track.stop()));
+  window.addEventListener("pagehide", () => { if (state.recording.active) { try { state.recording.recorder.stop(); } catch (error) {} } stopRecordingCapture(); state.stream?.getTracks().forEach((track) => track.stop()); });
 
   syncCanvases(); setControls(false); requestAnimationFrame(animationLoop);
 })();
