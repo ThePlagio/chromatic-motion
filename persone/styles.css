@@ -25,6 +25,8 @@ body {
 
 button, input { font: inherit; }
 
+[hidden] { display: none !important; }
+
 button { -webkit-tap-highlight-color: transparent; }
 
 .app-shell {
