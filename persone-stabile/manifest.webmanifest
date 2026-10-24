@@ -1,0 +1,11 @@
+{
+  "name": "Chromatic Motion · Persone stabile",
+  "short_name": "Persone stabile",
+  "description": "Versione stabile di confronto della segmentazione persone.",
+  "display": "standalone",
+  "background_color": "#101014",
+  "theme_color": "#101014",
+  "lang": "it",
+  "start_url": "./"
+}
+
