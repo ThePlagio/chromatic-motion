@@ -10,7 +10,8 @@ Il modello identifica pixel di persona e sfondo, non identità o istanze individ
 2. Con «Mostra maschera», osserva il verde intorno a una persona vicina, ferma e in movimento: controlla capelli, mani, arti e possibili porzioni di sfondo.
 3. Ripeti a figura intera e a distanze maggiori, al sole e all'ombra, davanti a sfondi semplici e complessi. Prova con una seconda persona.
 4. Prova «Camera + linee» e «Solo linee» e verifica fluidità, scostamenti e ritardo. Confronta le stesse scene e distanze con il Prototipo A.
-5. Se appare un errore, annota il messaggio; prova anche pausa, riavvio, chiusura e rotazione dell'iPhone.
+5. Tocca «Registra test» per acquisire al massimo 30 secondi della scena visualizzata, senza audio. Al termine usa «Condividi il video» oppure «Salva il video» e allegalo alla conversazione. Il formato dipende dal supporto di Safari; se la registrazione non parte, usa la registrazione schermo dell'iPhone come alternativa.
+6. Se appare un errore, annota il messaggio; prova anche pausa, riavvio, chiusura e rotazione dell'iPhone.
 
 Non è stato effettuato un test sulla fotocamera fisica dell'iPhone: risultati, prestazioni e affidabilità vanno verificati sul dispositivo reale.
 
