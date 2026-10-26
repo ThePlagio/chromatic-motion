@@ -1,0 +1,11 @@
+{
+  "name": "Chromatic Motion · Prototipo B",
+  "short_name": "Chromatic B",
+  "description": "Maschera persone stabilizzata e linee generative in tempo reale.",
+  "display": "standalone",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "lang": "it",
+  "start_url": "./"
+}
+
