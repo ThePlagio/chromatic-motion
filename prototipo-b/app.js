@@ -4,7 +4,9 @@
   const MEDIAPIPE_BUNDLE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs";
   const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm";
   const SEGMENTATION_MODEL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
-  const INFERENCE_INTERVAL_MS = 125;
+  // Stessa cadenza della prova persone che si era dimostrata più affidabile:
+  // lascia tempo a Safari e al modello di completare ogni fotogramma.
+  const INFERENCE_INTERVAL_MS = 180;
   const PERSON_CATEGORY = 1;
 
   const elements = {
@@ -180,37 +182,28 @@
   function updateMatteFromSegmentation() {
     const { width, height } = state.metrics;
     const raw = rawMaskContext.getImageData(0, 0, width, height).data;
-    const previous = state.auto.alpha;
-    // Anche alla stabilità più alta la prima maschera deve comparire subito.
-    const blend = 0.58 - state.stability * 0.025;
     const count = width * height;
     let occupancy = 0;
-    state.auto.clip.fill(0);
-
-    for (let pixel = 0, dataIndex = 3; pixel < count; pixel += 1, dataIndex += 4) {
-      const target = raw[dataIndex] / 255;
-      previous[pixel] += (target - previous[pixel]) * blend;
-    }
-
+    // Non filtrare la prima maschera: il valore qui arriva direttamente dal
+    // modello. Il precedente filtro temporale/erosione poteva cancellarla
+    // del tutto prima che venisse mostrata sul telefono.
     const output = matteContext.createImageData(width, height);
-    for (let y = 1; y < height - 1; y += 1) {
-      for (let x = 1; x < width - 1; x += 1) {
-        const pixel = y * width + x;
-        const core = Math.min(previous[pixel], previous[pixel - 1], previous[pixel + 1], previous[pixel - width], previous[pixel + width]);
-        const alpha = Math.round(clamp((core - 0.18) / 0.5) * 255);
-        const dataIndex = pixel * 4;
-        output.data[dataIndex] = 255;
-        output.data[dataIndex + 1] = 255;
-        output.data[dataIndex + 2] = 255;
-        output.data[dataIndex + 3] = alpha;
-        state.auto.clip[pixel] = alpha;
-        occupancy += alpha > 48 ? 1 : 0;
-      }
+    for (let pixel = 0, dataIndex = 3; pixel < count; pixel += 1, dataIndex += 4) {
+      const alpha = raw[dataIndex];
+      state.auto.alpha[pixel] = alpha / 255;
+      output.data[dataIndex - 3] = 255;
+      output.data[dataIndex - 2] = 255;
+      output.data[dataIndex - 1] = 255;
+      output.data[dataIndex] = alpha;
+      state.auto.clip[pixel] = alpha;
+      occupancy += alpha > 24 ? 1 : 0;
     }
     matteContext.putImageData(output, 0, 0);
     const now = performance.now();
     const previouslyHadMask = state.auto.hasMask;
-    state.auto.hasMask = occupancy > count * 0.002;
+    // Una persona occupa normalmente ben più di questa soglia; il valore
+    // basso evita di scartare una sagoma valida quando si avvicina alla camera.
+    state.auto.hasMask = occupancy > Math.max(24, count * 0.0005);
     if (state.auto.hasMask) state.auto.lastFoundAt = now;
     if (previouslyHadMask !== state.auto.hasMask || now - state.auto.lastStatusAt > 1200) {
       setStageNote(state.auto.hasMask ? "Maschera persone attiva" : "Cerco una persona");
