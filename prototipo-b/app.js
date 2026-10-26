@@ -73,6 +73,7 @@
       segmenter: null,
       lastInferenceAt: 0,
       lastFoundAt: 0,
+      lastStatusAt: 0,
       alpha: new Float32Array(0),
       clip: new Uint8Array(0),
       hasMask: false,
@@ -122,7 +123,8 @@
 
   function getMetrics() {
     const bounds = elements.stage.getBoundingClientRect();
-    const scale = Math.min(window.devicePixelRatio || 1, 1.5);
+    // A dimensione CSS è più leggera su Safari: il modello lavora già a risoluzione ridotta.
+    const scale = 1;
     return { cssWidth: Math.max(1, bounds.width), cssHeight: Math.max(1, bounds.height), width: Math.round(Math.max(1, bounds.width) * scale), height: Math.round(Math.max(1, bounds.height) * scale), scale };
   }
 
@@ -179,7 +181,8 @@
     const { width, height } = state.metrics;
     const raw = rawMaskContext.getImageData(0, 0, width, height).data;
     const previous = state.auto.alpha;
-    const blend = 0.46 - state.stability * 0.027;
+    // Anche alla stabilità più alta la prima maschera deve comparire subito.
+    const blend = 0.58 - state.stability * 0.025;
     const count = width * height;
     let occupancy = 0;
     state.auto.clip.fill(0);
@@ -194,19 +197,26 @@
       for (let x = 1; x < width - 1; x += 1) {
         const pixel = y * width + x;
         const core = Math.min(previous[pixel], previous[pixel - 1], previous[pixel + 1], previous[pixel - width], previous[pixel + width]);
-        const alpha = Math.round(clamp((core - 0.38) / 0.5) * 255);
+        const alpha = Math.round(clamp((core - 0.18) / 0.5) * 255);
         const dataIndex = pixel * 4;
         output.data[dataIndex] = 255;
         output.data[dataIndex + 1] = 255;
         output.data[dataIndex + 2] = 255;
         output.data[dataIndex + 3] = alpha;
         state.auto.clip[pixel] = alpha;
-        occupancy += alpha > 80 ? 1 : 0;
+        occupancy += alpha > 48 ? 1 : 0;
       }
     }
     matteContext.putImageData(output, 0, 0);
-    state.auto.hasMask = occupancy > count * 0.006;
-    if (state.auto.hasMask) state.auto.lastFoundAt = performance.now();
+    const now = performance.now();
+    const previouslyHadMask = state.auto.hasMask;
+    state.auto.hasMask = occupancy > count * 0.002;
+    if (state.auto.hasMask) state.auto.lastFoundAt = now;
+    if (previouslyHadMask !== state.auto.hasMask || now - state.auto.lastStatusAt > 1200) {
+      setStageNote(state.auto.hasMask ? "Maschera persone attiva" : "Cerco una persona");
+      setStatus(state.auto.hasMask ? (state.view === "mask" ? "Maschera pronta: il verde indica la zona usata per contenere le linee." : "Maschera pronta: creo le linee all'interno della persona.") : "Nessuna persona rilevata. Avvicinati, illumina il soggetto o controlla prima “Mostra maschera”.");
+      state.auto.lastStatusAt = now;
+    }
   }
 
   function consumeSegmentation(result) {
@@ -592,7 +602,17 @@
 
   elements.startCamera.addEventListener("click", startCamera);
   elements.stopCamera.addEventListener("click", stopCamera);
-  elements.autoMask.addEventListener("click", () => setAutoEnabled(!state.auto.enabled));
+  elements.autoMask.addEventListener("click", () => {
+    if (state.auto.failed) {
+      state.auto.failed = false;
+      state.auto.ready = false;
+      state.auto.segmenter?.close?.();
+      state.auto.segmenter = null;
+      setAutoEnabled(true);
+      return;
+    }
+    setAutoEnabled(!state.auto.enabled);
+  });
   elements.freezeFrame.addEventListener("click", freezeFrame);
   elements.liveFrame.addEventListener("click", resumeLive);
   elements.drawMask.addEventListener("click", () => {
