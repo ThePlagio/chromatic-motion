@@ -1,0 +1,10 @@
+{
+  "name": "Chromatic Motion · Prototipo C",
+  "short_name": "Chromatic Motion",
+  "display": "standalone",
+  "start_url": "./",
+  "background_color": "#07080c",
+  "theme_color": "#07080c",
+  "lang": "it"
+}
+
