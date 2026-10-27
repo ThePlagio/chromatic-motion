@@ -10,7 +10,7 @@
   <body>
     <main class="app">
       <header>
-        <p class="eyebrow">CHROMATIC MOTION · TEST 01</p>
+        <p class="eyebrow">CHROMATIC MOTION · TEST 02</p>
         <h1>Maschera persone</h1>
         <p class="intro">In questa prova il verde è sempre attivo: non ci sono linee, filtri o menu nascosti.</p>
       </header>
@@ -26,19 +26,21 @@
 
       <p class="status" id="status" role="status" aria-live="polite">Pronto per la prova.</p>
       <p class="metrics" id="metrics">Fotogrammi analizzati: 0 · Pixel persona: 0 · Maschera: assente</p>
+      <p class="device" id="device">Fotocamera: non attiva · Modello: versione fissa 1</p>
 
       <div class="actions">
-        <button class="primary" id="start" type="button">Apri fotocamera posteriore</button>
+        <button class="primary" id="start" type="button">Prova fotocamera posteriore</button>
+        <button id="front" type="button">Prova fotocamera frontale</button>
         <button id="stop" type="button" disabled>Chiudi fotocamera</button>
         <button id="retry" type="button" disabled>Ricarica modello</button>
       </div>
 
       <aside>
         <strong>Come leggere il risultato</strong>
-        <span>Se il contatore “Pixel persona” aumenta, il modello sta ricevendo la persona. Se è maggiore di zero, il verde deve essere visibile: questa pagina serve a verificare esattamente quel passaggio.</span>
+        <span>Il test usa una versione fissa del modello e cerca dinamicamente l'etichetta “persona”. Prova prima la posteriore, poi la frontale: il contatore mostrerà anche la confidenza massima della persona.</span>
       </aside>
     </main>
-    <script src="app.js?v=diagnostica-1"></script>
+    <script src="app.js?v=diagnostica-2"></script>
   </body>
 </html>
 
