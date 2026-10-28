@@ -20,6 +20,8 @@
     front: document.querySelector("#front"),
     stop: document.querySelector("#stop"),
     reload: document.querySelector("#reload"),
+    monitor: document.querySelector("#monitor"),
+    monitorExit: document.querySelector("#monitor-exit"),
     density: document.querySelector("#density"),
     size: document.querySelector("#size"),
     speed: document.querySelector("#speed"),
@@ -64,6 +66,8 @@
     maskSmooth: new Float32Array(0),
     previousMaskSize: 0,
     cameraMode: null,
+    monitorOutput: false,
+    monitorExitTimer: null,
     width: 0,
     height: 0,
     effect: "flow",
@@ -125,6 +129,7 @@
     elements.front.disabled = running || busy;
     elements.stop.disabled = !running;
     elements.reload.disabled = !running || busy;
+    elements.monitor.disabled = !running;
   }
 
   function fitCanvases() {
@@ -295,6 +300,33 @@
     elements.stage.classList.toggle("mask-view", state.view === "mask");
   }
 
+  function hideMonitorExitLater() {
+    window.clearTimeout(state.monitorExitTimer);
+    elements.monitorExit.classList.remove("hidden");
+    state.monitorExitTimer = window.setTimeout(() => elements.monitorExit.classList.add("hidden"), 2200);
+  }
+
+  function enterMonitorOutput() {
+    if (!state.stream) {
+      setStatus("Apri prima la fotocamera, scegli l'effetto e poi attiva l'uscita monitor.");
+      return;
+    }
+    state.monitorOutput = true;
+    document.body.classList.add("monitor-output");
+    elements.monitor.setAttribute("aria-pressed", "true");
+    hideMonitorExitLater();
+    window.setTimeout(fitCanvases, 50);
+  }
+
+  function exitMonitorOutput() {
+    state.monitorOutput = false;
+    window.clearTimeout(state.monitorExitTimer);
+    document.body.classList.remove("monitor-output");
+    elements.monitorExit.classList.remove("hidden");
+    elements.monitor.setAttribute("aria-pressed", "false");
+    window.setTimeout(fitCanvases, 50);
+  }
+
   function clearMask() {
     state.hasMask = false;
     state.maskPixels = 0;
@@ -430,6 +462,7 @@
   }
 
   function stopCamera() {
+    if (state.monitorOutput) exitMonitorOutput();
     state.stream?.getTracks().forEach((track) => track.stop());
     state.stream = null;
     elements.video.srcObject = null;
@@ -466,6 +499,11 @@
   elements.front.addEventListener("click", () => startCamera("user"));
   elements.stop.addEventListener("click", stopCamera);
   elements.reload.addEventListener("click", () => loadModel(true));
+  elements.monitor.addEventListener("click", enterMonitorOutput);
+  elements.monitorExit.addEventListener("click", exitMonitorOutput);
+  elements.stage.addEventListener("pointerdown", (event) => {
+    if (state.monitorOutput && event.target !== elements.monitorExit) hideMonitorExitLater();
+  });
   elements.effectButtons.forEach((button) => button.addEventListener("click", () => { state.effect = button.dataset.effect; setSelected(elements.effectButtons, state.effect); }));
   elements.paletteButtons.forEach((button) => button.addEventListener("click", () => { state.paletteMode = button.dataset.palette; setSelected(elements.paletteButtons, state.paletteMode); }));
   elements.viewButtons.forEach((button) => button.addEventListener("click", () => { state.view = button.dataset.view; setSelected(elements.viewButtons, state.view); refreshView(); }));
