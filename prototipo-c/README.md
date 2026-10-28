@@ -18,6 +18,7 @@ Per l'accesso alla fotocamera la pagina deve essere servita in HTTPS: GitHub Pag
 - **Reattività rilevamento** imposta l'intervallo fra le analisi. Valori più bassi sono più pronti ma richiedono più energia.
 - **Precisione del bordo** modifica la soglia di confidenza: aumentarla restringe la sagoma e riduce le fuoriuscite; diminuirla preserva più dettagli ma può includere sfondo.
 - **Stabilità contorno** media alcuni fotogrammi: riduce il tremolio, ma aggiunge un lieve ritardo.
+- **Uscita monitor** nasconde tutti i controlli e porta solo il palco video/grafica a tutto schermo. Dopo aver regolato l'effetto, collegare l'iPhone a un monitor o proiettore via USB-C/HDMI e toccare questo pulsante. Toccare una volta il palco per far comparire `Esci output`.
 
 ## Limiti noti
 
@@ -31,6 +32,7 @@ Il modello riconosce persone, non oggetti generici. Ombre forti, movimenti rapid
 4. Controlla prima `Maschera`: il colore verde deve seguire la persona.
 5. Torna a `Camera` o prova `Solo linee`; verifica che i tratti non escano dalla sagoma.
 6. Prova prima `Reattività` a 140 ms e `Precisione bordo` al 18%. Poi modifica un solo controllo per volta.
+7. Per una prova esterna, collega l'iPhone a un monitor via USB-C/HDMI, regola l'effetto e tocca `Uscita monitor`.
 
 Non è stato eseguito un test fisico di questa versione su iPhone prima della pubblicazione; la base della maschera deriva però dal Test 02 effettivamente verificato dall'utente su iPhone.
 
