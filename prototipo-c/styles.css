@@ -23,6 +23,7 @@ canvas { z-index: 1; pointer-events: none; }
 .empty span { color: var(--acid); font-size: 1.6rem; }
 .empty.hidden { display: none; }
 .stage-note { position: absolute; z-index: 4; top: 12px; left: 12px; margin: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 99px; background: rgba(4,5,8,.7); backdrop-filter: blur(8px); font-size: .72rem; font-weight: 760; }
+.monitor-exit { display: none; }
 .status { min-height: 2.6em; margin: 11px 3px 3px; color: #dbdce4; font-size: .88rem; font-weight: 680; }
 .telemetry, .camera-detail { margin: 0 3px; color: var(--muted); font-size: .76rem; }
 .panel { margin-top: 15px; padding: 17px; border: 1px solid var(--line); border-radius: 21px; background: var(--panel); box-shadow: 0 16px 42px rgba(0,0,0,.17); }
@@ -35,6 +36,7 @@ canvas { z-index: 1; pointer-events: none; }
 .button:disabled { cursor: not-allowed; opacity: .43; }
 .button.primary { border-color: transparent; background: var(--acid); color: #141700; }
 .button.quiet { background: transparent; color: var(--muted); }
+.monitor-button { grid-column: 1 / -1; border-color: rgba(216,255,50,.45); background: rgba(216,255,50,.09); color: var(--acid); }
 .camera-detail { margin: 12px 1px 0; }
 fieldset { min-width: 0; margin: 15px 0 0; padding: 0; border: 0; }
 legend { margin-bottom: 8px; color: #dfe0e8; font-size: .81rem; font-weight: 740; }
@@ -51,6 +53,14 @@ input[type="range"] { width: 100%; accent-color: var(--acid); }
 .notes { margin: 15px 0 0; border: 1px solid var(--line); border-radius: 16px; background: rgba(16,18,25,.75); color: var(--muted); }
 .notes summary { padding: 14px 15px; color: #e2e3eb; font-size: .83rem; font-weight: 760; cursor: pointer; }
 .notes p { margin: 0; padding: 0 15px 15px; font-size: .8rem; line-height: 1.45; }
-@media (min-width: 640px) { .app-shell { padding-top: 30px; } .stage { min-height: 520px; } .camera-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } .camera-actions .primary { grid-column: auto; } }
+body.monitor-output { overflow: hidden; background: #000; }
+body.monitor-output .app-shell { width: 100vw; height: 100dvh; padding: 0; }
+body.monitor-output .topbar, body.monitor-output .status, body.monitor-output .telemetry, body.monitor-output .panel, body.monitor-output .notes { display: none; }
+body.monitor-output .camera-card { position: fixed; z-index: 20; inset: 0; width: 100vw; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+body.monitor-output .stage { width: 100%; height: 100%; min-height: 100dvh; aspect-ratio: auto; }
+body.monitor-output .stage::after, body.monitor-output .stage-note { display: none; }
+body.monitor-output .monitor-exit { position: absolute; z-index: 8; top: max(14px, env(safe-area-inset-top)); right: 14px; display: block; padding: 8px 11px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(0,0,0,.5); color: #fff; font: inherit; font-size: .72rem; font-weight: 750; opacity: 1; transition: opacity .25s ease; }
+body.monitor-output .monitor-exit.hidden { pointer-events: none; opacity: 0; }
+@media (min-width: 640px) { .app-shell { padding-top: 30px; } .stage { min-height: 520px; } .camera-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } .camera-actions .primary, .camera-actions .monitor-button { grid-column: auto; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 
